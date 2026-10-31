@@ -63,6 +63,11 @@ public class Enemy extends Entity {
     private static final float ATTACK_RANGE  = 38f;
     private static final float ALERT_SPEED   = 60f;
     private double attackCooldown;
+    private double attackWindup;
+    private boolean attackTelegraph;
+    private final float attackRange;
+    private final double attackWindupDuration;
+    private final double attackCooldownDuration;
 
     // ── Animation ─────────────────────────────────────────────────────────
     private int    direction = 0;
@@ -99,6 +104,19 @@ public class Enemy extends Entity {
         this.spriteKey = spriteKey;
         this.assetLoader = loader;
         this.sprite    = loader.getImage("sprites/" + spriteKey + ".png");
+        if (spriteKey.contains("wraith")) {
+            attackRange = 128;
+            attackWindupDuration = 0.65;
+            attackCooldownDuration = 1.65;
+        } else if (spriteKey.contains("golem") || isBoss) {
+            attackRange = 42;
+            attackWindupDuration = isBoss ? 0.55 : 0.75;
+            attackCooldownDuration = isBoss ? 0.9 : 1.65;
+        } else {
+            attackRange = ATTACK_RANGE;
+            attackWindupDuration = 0.32;
+            attackCooldownDuration = 1.1;
+        }
     }
 
     // ── Move pool ─────────────────────────────────────────────────────────
@@ -127,13 +145,27 @@ public class Enemy extends Entity {
         }
         if (state == AIState.ALERT) {
             moving = false;
-            if (dist <= ATTACK_RANGE) {
-                if (attackCooldown == 0) {
-                    player.takeDamage(strength);
-                    map.spawnDamageNumber(player.getX() + 16, player.getY(), strength, false);
-                    attackCooldown = isBoss ? (bossPhase == 3 ? 0.45 : 0.8) : 1.1;
+            if (attackTelegraph) {
+                if (attackWindup <= 0) {
+                    attackTelegraph = false;
+                    if (dist <= attackRange) {
+                        boolean hit = player.takeDamage(strength);
+                        if (hit) map.spawnDamageNumber(player.getX() + 16, player.getY(), strength, false);
+                        else map.spawnParticle(player.getX(), player.getY() - 12,
+                                "Dodged!", Color.web("#9be7d4"));
+                        attackCooldown = isBoss && bossPhase == 3
+                                ? Math.min(attackCooldownDuration, 0.45) : attackCooldownDuration;
+                    } else {
+                        map.spawnParticle(x, y - 12, "Missed!", Color.web("#d5c7a1"));
+                    }
+                }
+            } else if (dist <= attackRange) {
+                if (attackCooldown <= 0) {
+                    attackTelegraph = true;
+                    attackWindup = attackWindupDuration;
                 }
             } else {
+                attackTelegraph = false;
                 moveTowards(player.getX(), player.getY(), ALERT_SPEED, dt, map);
             }
         } else {
@@ -144,6 +176,7 @@ public class Enemy extends Entity {
     private void tickTimers(double dt) {
         if (flashTimer > 0) flashTimer = Math.max(0, flashTimer - dt);
         attackCooldown = Math.max(0, attackCooldown - dt);
+        if (attackTelegraph) attackWindup = Math.max(0, attackWindup - dt);
         activeEffects.removeIf(effect -> !effect.tick(this, dt));
         if (state == AIState.STUNNED) {
             stunTimer -= dt;
@@ -208,10 +241,17 @@ public class Enemy extends Entity {
             int frame = moving ? animFrame : 0;
             gc.drawImage(sprite, frame * 32, direction * 32, 32, 32, x, y, 32, 32);
         } else {
-            gc.setFill(isBoss ? Color.web("#8b0000") : Color.web("#c0392b"));
-            gc.fillRect(x, y, width, height);
-            gc.setFill(Color.web("#f39c12"));
-            gc.fillOval(x + 8, y + 4, 16, 16);
+            renderProceduralSprite(gc);
+        }
+
+        if (attackTelegraph) {
+            double pulse = 0.45 + 0.35 * Math.sin(System.currentTimeMillis() / 55.0);
+            gc.setStroke(Color.color(1.0, 0.25, 0.16, pulse));
+            gc.setLineWidth(isBoss ? 3 : 2);
+            gc.strokeOval(x - 4, y - 4, width + 8, height + 8);
+            gc.setFill(Color.color(1, 0.78, 0.4, pulse));
+            gc.setFont(javafx.scene.text.Font.font("System", javafx.scene.text.FontWeight.BOLD, 14));
+            gc.fillText("!", x + width / 2.0 - 3, y - 16);
         }
 
         // HP bar above enemy
@@ -236,9 +276,51 @@ public class Enemy extends Entity {
         gc.fillOval(x + 4, y + height - 6, 24, 8);
     }
 
+    private void renderProceduralSprite(GraphicsContext gc) {
+        Color body = spriteKey.contains("golem") ? Color.web("#737d83")
+                : spriteKey.contains("wraith") ? Color.web("#9275bd")
+                : isBoss ? Color.web("#821e37") : Color.web("#a64b45");
+        Color accent = spriteKey.contains("wraith") ? Color.web("#8fe5ef")
+                : spriteKey.contains("golem") ? Color.web("#d29a5c")
+                : isBoss ? Color.web("#f4bd63") : Color.web("#e3b15b");
+        gc.setFill(Color.color(0, 0, 0, 0.28));
+        gc.fillOval(x + 3, y + height - 5, width - 6, 8);
+        gc.setFill(body);
+        if (spriteKey.contains("wraith")) {
+            gc.fillOval(x + 5, y + 2, width - 10, height - 7);
+            gc.fillPolygon(new double[]{x + 5, x + 12, x + 18, x + 25, x + width - 5},
+                    new double[]{y + height - 9, y + height, y + height - 7,
+                            y + height, y + height - 9}, 5);
+        } else if (spriteKey.contains("golem")) {
+            gc.fillRoundRect(x + 3, y + 5, width - 6, height - 9, 8, 8);
+            gc.fillRoundRect(x + 1, y + 12, 8, 12, 4, 4);
+            gc.fillRoundRect(x + width - 9, y + 12, 8, 12, 4, 4);
+        } else {
+            gc.fillPolygon(new double[]{x + 3, x + 8, x + 10, x + 22, x + 24, x + 29,
+                            x + 27, x + 5},
+                    new double[]{y + 13, y + 5, y + 12, y + 12, y + 5, y + 13,
+                            y + 27, y + 27}, 8);
+        }
+        gc.setFill(accent);
+        gc.fillOval(x + 9, y + 13, 4, 4);
+        gc.fillOval(x + width - 13, y + 13, 4, 4);
+        if (isBoss) {
+            gc.setStroke(accent);
+            gc.setLineWidth(2);
+            gc.strokeLine(x + 5, y + 8, x + 1, y + 1);
+            gc.strokeLine(x + width - 5, y + 8, x + width - 1, y + 1);
+        }
+    }
+
     // ── Combat ────────────────────────────────────────────────────────────
     public int takeDamage(int amount) {
-        int mitigated = Math.max(1, amount - defense);
+        return takeDamage(amount, 0);
+    }
+
+    public int takeDamage(int amount, double defensePenetration) {
+        int effectiveDefense = (int) Math.floor(
+                defense * (1 - Math.max(0, Math.min(1, defensePenetration))));
+        int mitigated = Math.max(1, amount - effectiveDefense);
         double vulnerability = activeEffects.stream()
             .mapToDouble(StatusEffect::getDamageTakenModifier).max().orElse(1.0);
         int dealt = Math.max(1, (int) Math.ceil(mitigated * vulnerability));
@@ -255,6 +337,8 @@ public class Enemy extends Entity {
     public void stun(double duration) {
         state     = AIState.STUNNED;
         stunTimer = duration;
+        attackTelegraph = false;
+        attackWindup = 0;
     }
 
     public void setBossPhase(int phase) {

@@ -28,10 +28,12 @@ public final class CombatManager {
             downedTimer += dt;
             if (downedTimer >= 2.5) {
                 player.heal(Math.max(1, player.getMaxHp() / 2));
+                player.restoreMp(player.getMaxMp());
+                player.stopMoving();
                 player.setX(map.getStartX());
                 player.setY(map.getStartY());
                 map.spawnParticle(player.getX(), player.getY() - 12,
-                        "You recover and return to the fight.", Color.web("#c8a96e"));
+                        "You recover. Nothing was lost.", Color.web("#c8a96e"));
                 downedTimer = 0;
             }
             return;
@@ -58,7 +60,9 @@ public final class CombatManager {
         int baseDamage = Math.max(1, (int) ((player.getStrength()
                 + player.getEquipment().getTotalAttack())
                 * (1 + player.getModifier("real_time_damage"))));
-        boolean critical = Math.random() < Math.min(0.45, 0.05 + player.getLuck() * 0.01);
+        double criticalChance = 0.05 + player.getLuck() * 0.01
+                + player.getModifier("crit_chance");
+        boolean critical = Math.random() < Math.max(0, Math.min(0.6, criticalChance));
         int dealt = target.takeDamage(critical ? (int) Math.ceil(baseDamage * 1.6) : baseDamage);
         bossManager.checkPhaseTransition(target);
         map.spawnDamageNumber(target.getX() + target.getWidth() / 2f,
@@ -80,34 +84,50 @@ public final class CombatManager {
         }
 
         double range = move.getType() == Move.Type.PHYSICAL ? 78 : 180;
-        Enemy target = findTarget(player, map, range);
-        if (target == null || !player.spendMp(move.getMpCost())) return;
+        java.util.List<Enemy> targets = findTargets(player, map, range, move.hitsAllTargets());
+        if (targets.isEmpty() || !player.spendMp(move.getMpCost())) return;
         abilityCooldown = ABILITY_COOLDOWN;
-        if (!move.hits()) {
-            map.spawnParticle(target.getX(), target.getY() - 12,
-                    move.getName() + " missed", Color.web("#d5c7a1"));
-            return;
-        }
+        for (Enemy target : targets) {
+            if (!move.hits()) {
+                map.spawnParticle(target.getX(), target.getY() - 12,
+                        move.getName() + " missed", Color.web("#d5c7a1"));
+                continue;
+            }
 
-        if (move.getType() != Move.Type.DEBUFF) {
-            int baseDamage = move.getPower();
-            if (move.getType() == Move.Type.PHYSICAL) baseDamage += player.getStrength() / 2;
-            baseDamage = Math.max(1, (int) (baseDamage * (1 + player.getModifier("real_time_damage"))));
-            int dealt = target.takeDamage(baseDamage);
-            map.spawnDamageNumber(target.getCenterX(), target.getY(), dealt, false);
-            bossManager.checkPhaseTransition(target);
+            if (move.getType() != Move.Type.DEBUFF) {
+                int baseDamage = move.getPower();
+                if (move.getType() == Move.Type.PHYSICAL) baseDamage += player.getStrength() / 2;
+                double damageModifier = player.getModifier("real_time_damage");
+                if (move.getType() == Move.Type.MAGICAL)
+                    damageModifier += player.getModifier("spell_power");
+                baseDamage = Math.max(1, (int) (baseDamage * (1 + damageModifier)));
+                double critChance = Math.max(0, Math.min(0.6,
+                        0.05 + player.getLuck() * 0.01 + player.getModifier("crit_chance")));
+                boolean critical = Math.random() < critChance;
+                int dealt = target.takeDamage(critical ? (int) Math.ceil(baseDamage * 1.6) : baseDamage,
+                        move.getDefensePenetration());
+                map.spawnDamageNumber(target.getCenterX(), target.getY(), dealt, critical);
+                bossManager.checkPhaseTransition(target);
+            }
+            if (move.getStatusEffect() != null) {
+                target.applyEffect(new StatusEffect(move.getStatusEffect(), 3.0));
+            }
+            map.spawnParticle(target.getX(), target.getY() - 12,
+                    move.getName() + "!", Color.web("#62d8e8"));
+            map.resolveEnemyDefeat(target, player);
         }
-        if (move.getStatusEffect() != null) {
-            target.applyEffect(new StatusEffect(move.getStatusEffect(), 3.0));
-        }
-        map.spawnParticle(target.getX(), target.getY() - 12,
-                move.getName() + "!", Color.web("#62d8e8"));
-        map.resolveEnemyDefeat(target, player);
     }
 
     private Enemy findTarget(Player player, GameMap map, double maxRange) {
+        java.util.List<Enemy> targets = findTargets(player, map, maxRange, false);
+        return targets.isEmpty() ? null : targets.get(0);
+    }
+
+    private java.util.List<Enemy> findTargets(Player player, GameMap map, double maxRange,
+                                               boolean allTargets) {
         double facingX = player.getFacingX();
         double facingY = player.getFacingY();
+        java.util.List<Enemy> targets = new java.util.ArrayList<>();
         Enemy nearest = null;
         double nearestDistance = maxRange;
 
@@ -116,13 +136,17 @@ public final class CombatManager {
             double dx = enemy.getCenterX() - player.getCenterX();
             double dy = enemy.getCenterY() - player.getCenterY();
             double distance = Math.hypot(dx, dy);
-            if (distance > nearestDistance || distance == 0) continue;
+            if (distance > maxRange || distance == 0) continue;
             double forward = (dx * facingX + dy * facingY) / distance;
             if (forward < 0.15) continue;
-            nearest = enemy;
-            nearestDistance = distance;
+            if (distance < nearestDistance) {
+                nearest = enemy;
+                nearestDistance = distance;
+            }
+            if (allTargets) targets.add(enemy);
         }
-        return nearest;
+        if (!allTargets && nearest != null) targets.add(nearest);
+        return targets;
     }
 
     /** Draws a short directional melee arc in world coordinates. */

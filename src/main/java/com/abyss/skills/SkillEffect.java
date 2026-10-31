@@ -80,9 +80,23 @@ public class SkillEffect {
         return e;
     }
 
+    public static SkillEffect passiveMpWithModifier(int perRank, String target, double modifierPerRank) {
+        SkillEffect e = passiveMp(perRank);
+        e.modTarget = target;
+        e.modPerRank = modifierPerRank;
+        return e;
+    }
+
     public static SkillEffect passiveSpd(int perRank) {
         SkillEffect e = new SkillEffect(EffectType.PASSIVE, "+" + perRank + " Speed per rank");
         e.spdPerRank = perRank;
+        return e;
+    }
+
+    public static SkillEffect passiveSpdWithDodge(int speedPerRank, double dodgePerRank) {
+        SkillEffect e = passiveSpd(speedPerRank);
+        e.modTarget = "dodge";
+        e.modPerRank = dodgePerRank;
         return e;
     }
 
@@ -131,6 +145,7 @@ public class SkillEffect {
         switch (type) {
             case PASSIVE -> {
                 p.applyStatDelta(hpPerRank, mpPerRank, strPerRank, defPerRank, spdPerRank, lckPerRank);
+                if (modTarget != null) p.applyModifier(modTarget, modPerRank);
             }
             case ACTIVE -> {
                 if (rank == 1 && grantedMove != null) {

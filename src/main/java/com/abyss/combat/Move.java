@@ -16,14 +16,28 @@ public class Move {
     private final int    mpCost;
     private final int    accuracy; // 0-100
     private final String statusEffect; // null = no effect
+    private final boolean hitsAllTargets;
+    private final double defensePenetration;
 
     public Move(String name, Type type, int power, int mpCost, int accuracy, String statusEffect) {
+        this(name, type, power, mpCost, accuracy, statusEffect, false);
+    }
+
+    public Move(String name, Type type, int power, int mpCost, int accuracy,
+                String statusEffect, boolean hitsAllTargets) {
+        this(name, type, power, mpCost, accuracy, statusEffect, hitsAllTargets, 0);
+    }
+
+    public Move(String name, Type type, int power, int mpCost, int accuracy,
+                String statusEffect, boolean hitsAllTargets, double defensePenetration) {
         this.name         = name;
         this.type         = type;
         this.power        = power;
         this.mpCost       = mpCost;
         this.accuracy     = accuracy;
         this.statusEffect = statusEffect;
+        this.hitsAllTargets = hitsAllTargets;
+        this.defensePenetration = Math.max(0, Math.min(1, defensePenetration));
     }
 
     public static Move basicAttack(int strength) {
@@ -38,4 +52,6 @@ public class Move {
     public int    getMpCost()      { return mpCost; }
     public int    getAccuracy()    { return accuracy; }
     public String getStatusEffect(){ return statusEffect; }
+    public boolean hitsAllTargets() { return hitsAllTargets; }
+    public double getDefensePenetration() { return defensePenetration; }
 }

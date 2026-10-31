@@ -70,7 +70,8 @@ public class SkillTree {
         add(node("w_heavy_strike", "Heavy Strike",
                 "A crushing blow. Physical attack, 35 power, ignores 30% DEF.",
                 "⚔", 1, 0, SkillNode.Branch.WARRIOR, 2, 1,
-                SkillEffect.activeMove(new Move("Heavy Strike", Move.Type.PHYSICAL, 35, 8, 90, null)),
+                SkillEffect.activeMove(new Move("Heavy Strike", Move.Type.PHYSICAL,
+                        35, 8, 90, null, false, 0.30)),
                 "w_iron_skin"));
         add(node("w_fortify", "Fortify",
                 "+20 HP and +4 DEF per rank.",
@@ -82,7 +83,7 @@ public class SkillTree {
         add(node("w_cleave", "Cleave",
                 "Wide swing. Physical 25 power — hits all enemies in range.",
                 "⚔", 2, 0, SkillNode.Branch.WARRIOR, 2, 1,
-                SkillEffect.activeMove(new Move("Cleave", Move.Type.PHYSICAL, 25, 12, 92, null)),
+                SkillEffect.activeMove(new Move("Cleave", Move.Type.PHYSICAL, 25, 12, 92, null, true)),
                 "w_heavy_strike"));
         add(node("w_battle_hardened", "Battle Hardened",
                 "Experience tempers you. +5 DEF and +8 HP per rank.",
@@ -145,7 +146,7 @@ public class SkillTree {
         add(node("a_mana_surge", "Mana Surge",
                 "+20 MP and +12% crit chance per rank.",
                 "💧", 3, 3, SkillNode.Branch.ARCANE, 2, 2,
-                SkillEffect.passiveMp(20),
+                SkillEffect.passiveMpWithModifier(20, "crit_chance", 0.12),
                 "a_void_rift"));
 
         add(node("a_archmage", "Archmage",
@@ -168,7 +169,7 @@ public class SkillTree {
         add(node("s_evasion", "Evasion",
                 "+3 SPD and +10% dodge per rank.",
                 "💨", 1, 5, SkillNode.Branch.SHADOW, 1, 3,
-                SkillEffect.passiveSpd(3),
+                SkillEffect.passiveSpdWithDodge(3, 0.10),
                 "s_shadow_step"));
 
         add(node("s_shadow_strike", "Shadow Strike",

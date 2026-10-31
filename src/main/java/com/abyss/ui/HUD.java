@@ -37,6 +37,7 @@ public class HUD {
     private String  notification    = "";
     private double  notifTimer      = 0;
     private Color   notifColor      = Color.web("#c8a96e");
+    private String location = "Ashenveil";
 
     // ─────────────────────────────────────────────────────────────────────
     public HUD(Player player, DayNightCycle dayNight, WeatherSystem weather) {
@@ -50,6 +51,10 @@ public class HUD {
         notification = msg;
         notifTimer   = 3.0;
         notifColor   = color;
+    }
+
+    public void setLocation(String location) {
+        this.location = location == null || location.isBlank() ? "Unknown" : location;
     }
 
     // ── Main render ───────────────────────────────────────────────────────
@@ -132,7 +137,7 @@ public class HUD {
 
     // ── Info panel (top-right) ────────────────────────────────────────────
     private void renderInfoPanel(GraphicsContext gc, double w, double h) {
-        double pw = 170, ph = 58;
+        double pw = 200, ph = 76;
         double px = w - pw - 10, py = 10;
 
         gc.setFill(Color.color(0.04, 0.04, 0.08, 0.82));
@@ -154,7 +159,14 @@ public class HUD {
         // Location (from map name - simplified)
         gc.setFill(Color.web("#555566"));
         gc.setFont(Font.font("Serif", 10));
-        gc.fillText("Ashenveil", px + 10, py + 50);
+        gc.fillText(location, px + 10, py + 50);
+        if (player.getRoadQuestStage() > 0) {
+            gc.setFill(Color.web("#f0c040"));
+            gc.setFont(Font.font("Serif", 10));
+            String questStatus = player.getRoadQuestStage() == 2 ? "Road secured"
+                    : "Road threat: " + player.getRoadQuestKills() + "/3";
+            gc.fillText(questStatus, px + 10, py + 66);
+        }
     }
 
     // ── Hotbar (bottom-centre) ────────────────────────────────────────────

@@ -5,6 +5,7 @@ import com.abyss.entities.Player;
 import com.abyss.lighting.LightingEngine;
 import com.abyss.ui.HUD;
 import com.abyss.ui.InventoryUI;
+import com.abyss.ui.MerchantShopUI;
 import com.abyss.ui.SettingsMenuUI;
 import com.abyss.ui.SkillTreeUI;
 import com.abyss.utils.AssetLoader;
@@ -51,6 +52,7 @@ public class GameLoop extends AnimationTimer {
     private final LightingEngine  lighting;
     private final SkillTreeUI     skillTreeUI;
     private final InventoryUI     inventoryUI = new InventoryUI();
+    private final MerchantShopUI merchantShop = new MerchantShopUI();
     private final SettingsMenuUI  settingsUI = new SettingsMenuUI();
     private final Perspective3DEngine perspective3D;
     private final DialogueHandler dialogueHandler = new DialogueHandler();
@@ -119,18 +121,21 @@ public class GameLoop extends AnimationTimer {
             } else if (inventoryUI.isOpen()) {
                 inventoryUI.close();
                 AssetLoader.getInstance().playSfx("audio/ui_click.mp3");
+            } else if (merchantShop.isOpen()) {
+                merchantShop.close();
             } else if (!world.isTransitioning()) {
                 settingsUI.open();
                 input.setFirstPersonLookEnabled(false);
             }
         }
         if (input.isJustPressed("p") && !settingsUI.isOpen() && !inventoryUI.isOpen()
+                && !merchantShop.isOpen()
                 && !skillTreeUI.isVisible() && !world.isTransitioning()) {
             settingsUI.open();
             input.setFirstPersonLookEnabled(false);
         }
         if (input.isJustPressed("i") && !skillTreeUI.isVisible()
-                && !settingsUI.isOpen() && !world.isTransitioning()) {
+                && !settingsUI.isOpen() && !merchantShop.isOpen() && !world.isTransitioning()) {
             inventoryUI.toggle();
             AssetLoader.getInstance().playSfx("audio/ui_click.mp3");
         }
@@ -141,7 +146,8 @@ public class GameLoop extends AnimationTimer {
             applyViewMode(settingsUI.isCloseUpPerspective(), true);
         }
 
-        boolean overlayOpen = inventoryUI.isOpen() || skillTreeUI.isVisible() || settingsUI.isOpen();
+        boolean overlayOpen = inventoryUI.isOpen() || skillTreeUI.isVisible()
+                || settingsUI.isOpen() || merchantShop.isOpen();
         boolean inputBlocked = overlayOpen || world.isTransitioning();
         if (input.isJustPressed("v") && !inputBlocked) {
             settingsUI.setCloseUpPerspective(!threeDimensionalView);
@@ -169,6 +175,7 @@ public class GameLoop extends AnimationTimer {
         }
 
         if (input.isJustPressed("k") && !inventoryUI.isOpen() && !settingsUI.isOpen()
+                && !merchantShop.isOpen()
                 && !world.isTransitioning()) {
             skillTreeUI.toggle();
             AssetLoader.getInstance().playSfx("audio/ui_click.mp3");
@@ -176,12 +183,17 @@ public class GameLoop extends AnimationTimer {
         skillTreeUI.handleInput(input);
 
         GameMap map = world.getActiveMap();
+        if (merchantShop.isOpen()) {
+            String message = merchantShop.handleInput(input, player);
+            if (!message.isBlank()) hud.showNotification(message, Color.web("#c8a96e"));
+        }
         if (inventoryUI.isOpen()) {
             String message = inventoryUI.handleInput(input, player, map);
             if (!message.isBlank()) hud.showNotification(message, Color.web("#c8a96e"));
         }
 
-        boolean modalOpen = skillTreeUI.isVisible() || inventoryUI.isOpen() || settingsUI.isOpen();
+        boolean modalOpen = skillTreeUI.isVisible() || inventoryUI.isOpen()
+                || settingsUI.isOpen() || merchantShop.isOpen();
         // Block gameplay while a modal screen or portal transition is active.
         // Keep the whole frame blocked when the transition ends mid-update too.
         boolean uiOpen = modalOpen || wasTransitioning || world.isTransitioning();
@@ -205,7 +217,11 @@ public class GameLoop extends AnimationTimer {
         map = world.getActiveMap();
 
         if (input.isJustPressed("e") && !uiOpen) {
-            hud.showNotification(map.interact(player, dialogueHandler), Color.web("#c8a96e"));
+            if (map.isNearMerchant(player)) {
+                merchantShop.open();
+            } else {
+                hud.showNotification(map.interact(player, dialogueHandler), Color.web("#c8a96e"));
+            }
         }
         if (!uiOpen) map.updateNPCs(dt, player, dayNight);
         dayNight.update(dt);
@@ -259,10 +275,12 @@ public class GameLoop extends AnimationTimer {
             world.renderOverlays(gc, w, h);
         }
 
+        hud.setLocation(map.getMapName());
         hud.render(gc, w, h, fps);
         inventoryUI.render(gc, w, h, player);
         skillTreeUI.render(gc, w, h);
         settingsUI.render(gc, w, h);
+        merchantShop.render(gc, w, h, player);
         world.renderPortalLoading(gc, w, h);
     }
 

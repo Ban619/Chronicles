@@ -13,6 +13,7 @@ import javafx.scene.paint.Color;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Random;
 
 /**
  * GameMap — Enhanced with:
@@ -45,11 +46,13 @@ public class GameMap {
 
     private final AssetLoader assetLoader;
     private Image tileset;
+    private final Random layoutRandom;
 
     // ─────────────────────────────────────────────────────────────────────
     public GameMap(String mapPath, AssetLoader loader) {
         this.assetLoader = loader;
         this.tileset     = loader.getImage("tiles/tileset.png");
+        this.layoutRandom = new Random(System.nanoTime() ^ mapPath.hashCode());
         int[] dims = loader.getMapDimensions(mapPath);
         this.cols = dims[0]; this.rows = dims[1];
         this.tileCache = new Tile[rows][cols];
@@ -120,7 +123,7 @@ public class GameMap {
     // ── THORNWOOD FOREST ──────────────────────────────────────────────────
     private void generateForest() {
         mapName = "Thornwood Forest";
-        java.util.Random rng = new java.util.Random(42);
+        Random rng = layoutRandom;
         for (int r=0;r<rows;r++) for (int c=0;c<cols;c++)
             groundLayer[r][c] = rng.nextDouble()<0.15 ? Tile.DIRT : Tile.GRASS;
         for (int r=1;r<rows-1;r++) for (int c=1;c<cols-1;c++) {
@@ -140,14 +143,23 @@ public class GameMap {
                 overlayLayer[rows/2][c]=0;
             }
         // Glowing mushrooms as dim lights
-        for (int i=0;i<10;i++) {
+        int mushroomCount = 7 + rng.nextInt(8);
+        for (int i=0;i<mushroomCount;i++) {
             int mr=3+rng.nextInt(rows-6), mc=3+rng.nextInt(cols-6);
             if (objectLayer[mr][mc]==0) objectLayer[mr][mc]=Tile.TORCH;
         }
         // East stream
-        for (int r=rows/4;r<rows*3/4;r++) { groundLayer[r][cols-4]=Tile.WATER; groundLayer[r][cols-5]=Tile.WATER; }
+        int streamCol = Math.max(pathCol + 5, cols - 4 - rng.nextInt(4));
+        int streamStart = rows / 4 + rng.nextInt(Math.max(1, rows / 10));
+        int streamEnd = Math.min(rows - 1, rows * 3 / 4 + rng.nextInt(Math.max(1, rows / 10)));
+        for (int r=streamStart;r<streamEnd;r++) {
+            groundLayer[r][streamCol]=Tile.WATER;
+            if (streamCol > 0) groundLayer[r][streamCol-1]=Tile.WATER;
+        }
         // Stone ruins cluster
-        for (int r=rows/2+3;r<rows/2+7;r++) for (int c=pathCol-8;c<pathCol-4;c++)
+        int ruinRow = Math.min(rows - 8, rows / 2 + 2 + rng.nextInt(7));
+        int ruinCol = Math.max(2, pathCol - 12 + rng.nextInt(6));
+        for (int r=ruinRow;r<ruinRow+4;r++) for (int c=ruinCol;c<ruinCol+4;c++)
             if (rng.nextBoolean()) objectLayer[r][c]=Tile.WALL_STONE;
         startX=pathCol*Tile.SIZE; startY=2*Tile.SIZE;
     }
@@ -386,6 +398,11 @@ public class GameMap {
         if (!enemy.markDefeated()) return false;
         player.gainXp(enemy.getXpReward());
         player.addGold(enemy.getGoldReward());
+        if (player.recordRoadQuestKill()) {
+            spawnParticle(player.getX(), player.getY() - 30,
+                    "Road quest: " + player.getRoadQuestKills() + "/3 enemies",
+                    Color.web("#f0c040"));
+        }
         dropCraftingLoot(enemy);
         spawnParticle(enemy.getX(), enemy.getY() - 12,
                 "+" + enemy.getXpReward() + " XP  +" + enemy.getGoldReward() + "g",
@@ -475,12 +492,30 @@ public class GameMap {
                 if (companion.tryRecruit(player)) return nearestNpc.getName() + " joined your party.";
             }
             if (nearestNpc != null) {
+                if ("Elder Aldric".equals(nearestNpc.getName())) {
+                    if (player.getRoadQuestStage() == 0) {
+                        player.acceptRoadQuest();
+                        return "Quest accepted: Clear 3 enemies from the road, then return to Elder Aldric.";
+                    }
+                    if (player.getRoadQuestStage() == 1 && player.getRoadQuestKills() < 3) {
+                        return "Elder Aldric: The road is still dangerous. Enemies defeated: "
+                                + player.getRoadQuestKills() + "/3.";
+                    }
+                    if (player.completeRoadQuest()) {
+                        player.addGold(120);
+                        player.gainXp(100);
+                        player.adjustReputation(15);
+                        return "Quest complete! The road is safe. You earned 120 gold, 100 XP, and 15 reputation.";
+                    }
+                    return "Elder Aldric: Ashenveil is safer thanks to you. Thank you, friend.";
+                }
                 if (nearestNpc.getType() == NPC.NPCType.HEALER) {
                     return receiveHealerTreatment(player, player.getReputation() >= 50 ? 0 : 25);
                 }
                 if (nearestNpc.getType() == NPC.NPCType.BAKER) {
                     return buyHoneyBun(player);
                 }
+
                 return nearestNpc.getName() + ": " + nearestNpc.getDialogue(player, dialogueHandler);
             }
             return "Nothing nearby to interact with.";
@@ -522,6 +557,12 @@ public class GameMap {
         }
     }
 
+    public boolean isNearMerchant(Player player) {
+        return npcs.stream().anyMatch(npc -> npc.isActive()
+                && npc.getType() == NPC.NPCType.MERCHANT
+                && npc.distanceTo(player) <= 56f);
+    }
+
     private String receiveHealerTreatment(Player player, int cost) {
         boolean needsCare = player.getHp() < player.getMaxHp() || player.getMp() < player.getMaxMp();
         for (PartyMember member : player.getParty()) {
@@ -561,8 +602,50 @@ public class GameMap {
     public void renderGroundLayer(GraphicsContext gc,Camera cam) {
         int sc=Math.max(0,cam.getOffsetX()/Tile.SIZE),sr=Math.max(0,cam.getOffsetY()/Tile.SIZE);
         int ec=Math.min(cols,sc+cam.getViewCols()+2),er=Math.min(rows,sr+cam.getViewRows()+2);
-        for(int r=sr;r<er;r++) for(int c=sc;c<ec;c++)
-            new Tile(groundLayer[r][c]).render(gc,tileset,c*Tile.SIZE,r*Tile.SIZE,TILES_PER_ROW);
+        for(int r=sr;r<er;r++) for(int c=sc;c<ec;c++) {
+            int tileId = groundLayer[r][c];
+            new Tile(tileId).render(gc,tileset,c*Tile.SIZE,r*Tile.SIZE,TILES_PER_ROW);
+            if (tileset == null) renderBiomeDetail(gc, tileId, c * Tile.SIZE, r * Tile.SIZE, r, c);
+        }
+    }
+
+    private void renderBiomeDetail(GraphicsContext gc, int tileId, int x, int y, int row, int col) {
+        int mark = Math.floorMod(row * 73856093 ^ col * 19349663 ^ tileId * 83492791, 13);
+        if (mark > 2 || tileId == Tile.WATER || tileId == Tile.LAVA) return;
+        gc.save();
+        switch (biome) {
+            case FOREST -> {
+                gc.setFill(Color.color(0.52, 0.78, 0.35, 0.38));
+                gc.fillOval(x + 6 + mark * 3, y + 9, 3, 5);
+                gc.fillOval(x + 11 + mark * 2, y + 13, 3, 4);
+                if (mark == 0) {
+                    gc.setFill(Color.web("#dbbf75", 0.75));
+                    gc.fillOval(x + 23, y + 7, 3, 3);
+                }
+            }
+            case DUNGEON -> {
+                gc.setStroke(Color.color(0.08, 0.10, 0.12, 0.44));
+                gc.setLineWidth(1.2);
+                gc.strokeLine(x + 7, y + 8, x + 12, y + 13);
+                gc.strokeLine(x + 12, y + 13, x + 10, y + 19);
+                gc.strokeLine(x + 12, y + 13, x + 18, y + 12);
+            }
+            case BOSS_ARENA -> {
+                gc.setFill(Color.color(1, 0.36, 0.08, 0.55));
+                gc.fillOval(x + 7 + mark * 4, y + 20, 2.5, 2.5);
+                gc.setStroke(Color.color(0.35, 0.15, 0.12, 0.5));
+                gc.strokeLine(x + 20, y + 7, x + 25, y + 12);
+            }
+            case VILLAGE -> {
+                if (tileId == Tile.GRASS && mark == 0) {
+                    gc.setFill(Color.color(0.96, 0.81, 0.38, 0.7));
+                    gc.fillOval(x + 17, y + 10, 3, 3);
+                    gc.setFill(Color.color(0.9, 0.7, 0.35, 0.55));
+                    gc.fillOval(x + 20, y + 12, 2, 2);
+                }
+            }
+        }
+        gc.restore();
     }
     public void renderObjectLayer(GraphicsContext gc,Camera cam) {
         int sc=Math.max(0,cam.getOffsetX()/Tile.SIZE),sr=Math.max(0,cam.getOffsetY()/Tile.SIZE);

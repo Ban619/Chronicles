@@ -48,6 +48,8 @@ public class Player extends Entity {
     private int    luck      = 3;
     private int    gold       = 150;
     private int    reputation = 0;       // -100 (villain) … +100 (hero)
+    private int roadQuestStage;
+    private int roadQuestKills;
 
     // ── Customisation ─────────────────────────────────────────────────────
     private String  hairStyle  = "short";
@@ -381,9 +383,12 @@ public class Player extends Entity {
     }
 
     // ── Combat helpers ────────────────────────────────────────────────────
-    public void takeDamage(int amount) {
+    public boolean takeDamage(int amount) {
+        double dodgeChance = Math.max(0, Math.min(0.5, getModifier("dodge")));
+        if (Math.random() < dodgeChance) return false;
         int mitigated = Math.max(1, amount - getDefense());
         hp = Math.max(0, hp - mitigated);
+        return true;
     }
 
     public void heal(int amount) {
@@ -453,6 +458,8 @@ public class Player extends Entity {
     public Equipment        getEquipment()  { return equipment; }
     public List<PartyMember> getParty()     { return party; }
     public int    getHotbarSlot()  { return hotbarSlot; }
+    public int getRoadQuestStage() { return roadQuestStage; }
+    public int getRoadQuestKills() { return roadQuestKills; }
     public String getHairStyle()   { return hairStyle; }
     public Color  getHairColor()   { return hairColor; }
     public Color  getSkinTone()    { return skinTone; }
@@ -467,6 +474,22 @@ public class Player extends Entity {
     public void addGold(int g)              { gold += g; }
     public void spendGold(int g)            { gold = Math.max(0, gold - g); }
     public void adjustReputation(int delta) { reputation = Math.max(-100, Math.min(100, reputation + delta)); }
+    public boolean acceptRoadQuest() {
+        if (roadQuestStage != 0) return false;
+        roadQuestStage = 1;
+        roadQuestKills = 0;
+        return true;
+    }
+    public boolean recordRoadQuestKill() {
+        if (roadQuestStage != 1 || roadQuestKills >= 3) return false;
+        roadQuestKills++;
+        return true;
+    }
+    public boolean completeRoadQuest() {
+        if (roadQuestStage != 1 || roadQuestKills < 3) return false;
+        roadQuestStage = 2;
+        return true;
+    }
     public void setHairStyle(String s)      { hairStyle = s; }
     public void setHairColor(Color c)       { hairColor = c; }
     public void setSkinTone(Color c)        { skinTone = c; }
@@ -493,6 +516,8 @@ public class Player extends Entity {
         m.put("luck",       luck);
         m.put("gold",       gold);
         m.put("reputation", reputation);
+        m.put("roadQuestStage", roadQuestStage);
+        m.put("roadQuestKills", roadQuestKills);
         m.put("hairStyle",  hairStyle);
         m.put("clothing",   clothing);
         m.put("accessory",  accessory);
@@ -519,6 +544,8 @@ public class Player extends Entity {
         luck = Math.max(0, savedInt(data, "luck", luck));
         gold = Math.max(0, savedInt(data, "gold", gold));
         reputation = Math.max(-100, Math.min(100, savedInt(data, "reputation", reputation)));
+        roadQuestStage = Math.max(0, Math.min(2, savedInt(data, "roadQuestStage", 0)));
+        roadQuestKills = Math.max(0, Math.min(3, savedInt(data, "roadQuestKills", 0)));
         hairStyle = savedString(data, "hairStyle", hairStyle);
         clothing = savedString(data, "clothing", clothing);
         accessory = savedString(data, "accessory", accessory);

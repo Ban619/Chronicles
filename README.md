@@ -7,19 +7,19 @@
 
 | System | Details |
 |---|---|
-| **World** | Four procedurally generated biomes, tile collision, region transitions |
+| **World** | Four distinct biomes, varied forest layouts, tile collision, and region transitions |
 | **Day/Night and Weather** | Time-of-day lighting, weather states, and particle effects |
 | **Player** | HP/MP/XP/level, core stats, stackable inventory, equipment, crafting, and hotbar |
 | **Party and NPCs** | Recruitable companions, patrol behavior, schedules, and reputation-aware dialogue |
-| **Real-time Combat** | Enemies pursue and attack nearby players; directional melee attacks use Space |
+| **Real-time Combat** | Directional melee, multi-target Cleave, dodge chance from skills, and visibly telegraphed enemy attacks |
 | **Bosses** | Boss damage and attack rate increase as health drops through phases |
-| **Progression** | Skill-tree overlay, XP, levels, gold, equipment bonuses, and crafting materials |
+| **Progression** | Skill-tree overlay, XP, levels, a quest objective, merchant purchases, equipment, and crafting materials |
 | **Rendering** | 2D tile renderer and optional JavaFX 3D perspective |
 | **Model Studio** | Compose, preview, validate, and save reusable 3D tile models and components |
 | **Save/Load** | Three JSON slots under `~/.chronicles_abyss/saves/`; F5/F9 quick actions |
 | **Input** | Keyboard movement and interaction, touch movement, and mouse-look in 3D mode |
 
-Quests, achievements, shop transactions, full settings screens, and JSON-driven map contents are not implemented yet.
+The first quest is a compact combat-and-return objective from Elder Aldric. Merchants sell health and mana potions and a starter weapon. Defeat returns the player to the current region's entrance with no loss of items or gold. Achievements and JSON-driven map contents are not implemented yet.
 
 ---
 
@@ -41,7 +41,7 @@ chronicles-of-the-abyss/
   │       ├── items/               # Inventory item and equipment models
   │       ├── lighting/            # 2D lighting renderer
   │       ├── skills/              # Skill graph and effects
-  │       ├── ui/                  # HUD, inventory, and skill-tree overlays
+  │       ├── ui/                  # HUD, inventory, merchant, and skill overlays
   │       ├── utils/               # Input, assets, dialogue, save/load
   │       ├── world/               # Maps, tiles, camera, transitions, weather
   │       └── world3d/             # 3D renderer, model library, and Studio
@@ -114,6 +114,8 @@ java -jar target/chronicles-of-the-abyss-1.0.0-shaded.jar
 | `Esc` | Back / Close menu |
 | `F5` | Quick-save (slot 1) |
 | `F9` | Quick-load (slot 1) |
+
+Press `E` near Elder Aldric to accept or turn in the road-clearing quest. Progress is saved and counts defeated enemies while the quest is active. Press `E` near a merchant to open the shop; use `1`–`3` to buy an item. Enemy attacks have a short visual windup; wraiths attack from range, golems hit slowly and heavily, and wolves strike quickly. Evasion skills can dodge attacks. Defeat restores the player at the current region entrance without removing gold or items.
 
 Combine two movement keys for diagonal movement. In close-up perspective, the hero faces movement in eight compass directions, including northeast and southwest; mouse-look continues to rotate the camera freely. The 2D sprite sheet has four facing rows, so diagonal facing uses the nearest cardinal sprite.
 
@@ -188,4 +190,3 @@ Quest tracking is not implemented yet. A quest system will need persistent quest
 - **Responsive camera** — canvas binds to window, camera recalculates viewport each frame
 
 ---
-
