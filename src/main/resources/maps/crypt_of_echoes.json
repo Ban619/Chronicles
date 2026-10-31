@@ -1,0 +1,9 @@
+{
+  "name": "Crypt of Echoes",
+  "cols": 64, "rows": 56,
+  "biome": "DUNGEON",
+  "startX": 10, "startY": 8,
+  "transitions": [
+    { "direction": "NORTH", "targetMap": "maps/world_map.json", "spawnX": 40, "spawnY": 53 }
+  ]
+}

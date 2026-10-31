@@ -1,0 +1,54 @@
+{
+  "name": "Lantern Cluster Component",
+  "tileId": 0,
+  "parts": [
+    {
+      "name": "Socket",
+      "shape": "CYLINDER",
+      "x": 0.0,
+      "y": 4.0,
+      "z": 0.0,
+      "width": 12.0,
+      "height": 7.0,
+      "depth": 12.0,
+      "rotateX": 0.0,
+      "rotateY": 0.0,
+      "rotateZ": 0.0,
+      "color": "#67503a",
+      "material": "WOOD",
+      "finish": "MATTE"
+    },
+    {
+      "name": "Glass body",
+      "shape": "SPHERE",
+      "x": 0.0,
+      "y": 20.0,
+      "z": 0.0,
+      "width": 15.0,
+      "height": 20.0,
+      "depth": 15.0,
+      "rotateX": 0.0,
+      "rotateY": 0.0,
+      "rotateZ": 0.0,
+      "color": "#d88a3e",
+      "material": "GLASS",
+      "finish": "GLASS"
+    },
+    {
+      "name": "Flame core",
+      "shape": "SPHERE",
+      "x": 0.0,
+      "y": 20.0,
+      "z": 0.0,
+      "width": 6.0,
+      "height": 13.0,
+      "depth": 6.0,
+      "rotateX": 0.0,
+      "rotateY": 0.0,
+      "rotateZ": 0.0,
+      "color": "#ffe18a",
+      "material": "FLAME",
+      "finish": "EMISSIVE"
+    }
+  ]
+}

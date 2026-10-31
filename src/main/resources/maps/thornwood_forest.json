@@ -1,0 +1,10 @@
+{
+  "name": "Thornwood Forest",
+  "cols": 80, "rows": 60,
+  "biome": "FOREST",
+  "startX": 40, "startY": 2,
+  "transitions": [
+    { "direction": "WEST",  "targetMap": "maps/world_map.json",     "spawnX": 77, "spawnY": 27 },
+    { "direction": "SOUTH", "targetMap": "maps/dragons_maw.json",    "spawnX": 28, "spawnY": 2  }
+  ]
+}

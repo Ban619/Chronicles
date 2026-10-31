@@ -1,0 +1,9 @@
+{
+  "name": "Dragon's Maw",
+  "cols": 56, "rows": 48,
+  "biome": "BOSS_ARENA",
+  "startX": 28, "startY": 42,
+  "transitions": [
+    { "direction": "NORTH", "targetMap": "maps/thornwood_forest.json", "spawnX": 40, "spawnY": 57 }
+  ]
+}

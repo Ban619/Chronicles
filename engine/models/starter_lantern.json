@@ -1,0 +1,70 @@
+{
+  "name": "Starter Lantern",
+  "tileId": 0,
+  "parts": [
+    {
+      "name": "Bronze base",
+      "shape": "CYLINDER",
+      "x": 0.0,
+      "y": 3.0,
+      "z": 0.0,
+      "width": 13.0,
+      "height": 6.0,
+      "depth": 13.0,
+      "rotateX": 0.0,
+      "rotateY": 0.0,
+      "rotateZ": 0.0,
+      "color": "#755239",
+      "material": "WOOD",
+      "finish": "MATTE"
+    },
+    {
+      "name": "Glass chamber",
+      "shape": "CYLINDER",
+      "x": 0.0,
+      "y": 17.0,
+      "z": 0.0,
+      "width": 8.0,
+      "height": 22.0,
+      "depth": 8.0,
+      "rotateX": 0.0,
+      "rotateY": 0.0,
+      "rotateZ": 0.0,
+      "color": "#e89b4b",
+      "material": "GLASS",
+      "finish": "GLASS"
+    },
+    {
+      "name": "Flame",
+      "shape": "SPHERE",
+      "x": 0.0,
+      "y": 18.0,
+      "z": 0.0,
+      "width": 5.0,
+      "height": 11.0,
+      "depth": 5.0,
+      "rotateX": 0.0,
+      "rotateY": 0.0,
+      "rotateZ": 0.0,
+      "color": "#ffd875",
+      "material": "FLAME",
+      "finish": "EMISSIVE"
+    },
+    {
+      "name": "Top cap",
+      "shape": "BOX",
+      "x": 0.0,
+      "y": 31.0,
+      "z": 0.0,
+      "width": 15.0,
+      "height": 3.0,
+      "depth": 15.0,
+      "rotateX": 0.0,
+      "rotateY": 0.0,
+      "rotateZ": 0.0,
+      "color": "#4b4030",
+      "material": "IRON",
+      "finish": "SATIN"
+    }
+  ]
+}

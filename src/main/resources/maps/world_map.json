@@ -1,0 +1,61 @@
+{
+  "name": "Ashenveil",
+  "cols": 80,
+  "rows": 60,
+  "tileSize": 32,
+  "startX": 7,
+  "startY": 26,
+  "layers": {
+    "ground":  "maps/ashenveil_ground.csv",
+    "objects": "maps/ashenveil_objects.csv",
+    "overlay": "maps/ashenveil_overlay.csv"
+  },
+  "regions": [
+    { "name": "Ashenveil Village",  "x": 0,  "y": 0,  "w": 40, "h": 30 },
+    { "name": "Southern Wildlands","x": 0,  "y": 30, "w": 80, "h": 30 }
+  ],
+  "transitions": [
+    { "x": 20, "y": 0, "w": 1, "h": 30, "target": "maps/dungeon_entrance.json" }
+  ],
+  "npcs": [
+    {
+      "id":        "elder_aldric",
+      "name":      "Elder Aldric",
+      "type":      "QUEST_GIVER",
+      "x":         9,
+      "y":         8,
+      "dialogueKey": "elder_aldric",
+      "waypoints": [ [9,8], [11,8] ],
+      "home":      [9, 8]
+    },
+    {
+      "id":        "merchant_mira",
+      "name":      "Mira the Merchant",
+      "type":      "MERCHANT",
+      "x":         12,
+      "y":         7,
+      "dialogueKey": "merchant_mira"
+    },
+    {
+      "id":        "lyra",
+      "name":      "Lyra",
+      "type":      "COMPANION",
+      "x":         13,
+      "y":         6,
+      "dialogueKey": "lyra_companion",
+      "archetype": "ROGUE",
+      "hireCost":  0,
+      "minRep":    0
+    }
+  ],
+  "enemies": [
+    { "name": "Shadow Wolf",  "x": 22, "y": 18, "type": "enemy_wolf",    "hp": 60,  "str": 12, "def": 4,  "spd": 5, "xp": 30,  "gold": 10  },
+    { "name": "Dark Golem",   "x": 26, "y": 20, "type": "enemy_golem",   "hp": 100, "str": 18, "def": 12, "spd": 3, "xp": 65,  "gold": 25  },
+    { "name": "Void Wraith",  "x": 19, "y": 22, "type": "enemy_wraith",  "hp": 80,  "str": 15, "def": 6,  "spd": 7, "xp": 50,  "gold": 18  },
+    { "name": "Lord Malachar","x": 20, "y": 27, "type": "boss_malachar", "hp": 350, "str": 28, "def": 18, "spd": 5, "xp": 300, "gold": 150, "boss": true }
+  ],
+  "chests": [
+    { "x": 34, "y": 4,  "loot": ["potion_hp", "iron_ore"] },
+    { "x": 4,  "y": 24, "loot": ["potion_mp", "leather"] }
+  ]
+}
