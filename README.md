@@ -1,5 +1,5 @@
 # Chronicles of the Abyss
-### A 2D Tile-Based RPG — Java 21 + JavaFX
+### 2D/3D Tile-Based RPG 
 
 ---
 
