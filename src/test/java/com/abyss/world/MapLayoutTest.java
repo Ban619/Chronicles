@@ -14,8 +14,8 @@ class MapLayoutTest {
         int center = village.getCols() / 2;
         int river = village.getRows() / 2;
 
-        assertEquals(Tile.BRIDGE, village.getGroundTileId(river - 1, center + 8));
-        assertFalse(village.isBlocked((center + 8) * Tile.SIZE, (river - 1) * Tile.SIZE,
+        assertEquals(Tile.BRIDGE, village.getGroundTileId(river - 1, center));
+        assertFalse(village.isBlocked(center * Tile.SIZE, (river - 1) * Tile.SIZE,
                 Tile.SIZE, Tile.SIZE));
         assertFalse(village.isBlocked(center * Tile.SIZE, (river + 8) * Tile.SIZE,
                 Tile.SIZE, Tile.SIZE));

@@ -102,13 +102,15 @@ public class GameMap {
         for (int r = riverStart; r < riverEnd; r++) {
             for (int c = 4; c < cols - 4; c++) groundLayer[r][c] = Tile.WATER;
         }
-        for (int c = cols / 2 - 1; c < cols - 1; c++) {
-            for (int r = riverStart; r < riverEnd; r++) groundLayer[r][c] = Tile.BRIDGE;
-        }
         paintPath(3, mid - 4, cols - 2, mid - 3, Tile.FLOOR_STONE);
-        for (int r = mid; r < rows; r++) {
+        for (int r = 1; r < riverStart; r++)
+            paintPath(cols / 2 - 1, r, cols / 2 + 1, r, Tile.DIRT);
+        for (int r = riverEnd; r < rows; r++) {
             paintPath(cols / 2 - 1, r, cols / 2 + 1, r, Tile.DIRT);
         }
+        for (int r = riverStart; r < riverEnd; r++)
+            for (int c = cols / 2 - 1; c <= cols / 2 + 1; c++)
+                groundLayer[r][c] = Tile.BRIDGE;
         for (int r = mid - 4; r <= mid + 4; r++) objectLayer[r][cols - 1] = 0;
         paintPath(6, mid - 8, 17, mid - 5, Tile.FLOOR_STONE);
         paintPath(18, mid - 6, 25, mid - 3, Tile.FLOOR_STONE);
@@ -764,42 +766,109 @@ public class GameMap {
     }
 
     private void renderBiomeDetail(GraphicsContext gc, int tileId, int x, int y, int row, int col) {
-        int mark = Math.floorMod(row * 73856093 ^ col * 19349663 ^ tileId * 83492791, 13);
-        if (mark > 2 || tileId == Tile.WATER || tileId == Tile.LAVA) return;
+        int mark = Math.floorMod(row * 73856093 ^ col * 19349663 ^ tileId * 83492791, 23);
         gc.save();
         switch (biome) {
             case FOREST -> {
-                gc.setFill(Color.color(0.52, 0.78, 0.35, 0.38));
-                gc.fillOval(x + 6 + mark * 3, y + 9, 3, 5);
-                gc.fillOval(x + 11 + mark * 2, y + 13, 3, 4);
-                if (mark == 0) {
-                    gc.setFill(Color.web("#dbbf75", 0.75));
-                    gc.fillOval(x + 23, y + 7, 3, 3);
+                if (tileId == Tile.DIRT) {
+                    renderPathWear(gc, x, y, row, col, mark, Tile.GRASS);
+                    if (mark < 7) {
+                        gc.setFill(Color.color(0.18, 0.16, 0.12, 0.35));
+                        gc.fillOval(x + 5 + mark, y + 19 + mark % 4, 2, 1.5);
+                        gc.fillOval(x + 21 - mark % 5, y + 8 + mark % 3, 1.5, 1.5);
+                    }
+                } else if (tileId == Tile.GRASS && mark < 9) {
+                    gc.setFill(Color.color(0.52, 0.78, 0.35, 0.48));
+                    gc.strokeLine(x + 8 + mark, y + 23, x + 7 + mark, y + 18);
+                    gc.strokeLine(x + 10 + mark, y + 23, x + 12 + mark, y + 17);
+                    if (mark < 3) {
+                        gc.setFill(Color.web(mark == 0 ? "#e5d48a" : "#c7a6d8", 0.9));
+                        gc.fillOval(x + 22 - mark * 2, y + 8 + mark, 3, 3);
+                        gc.fillOval(x + 23 - mark * 2, y + 7 + mark, 2, 2);
+                    }
+                } else if (tileId == Tile.FLOOR_STONE && mark < 8) {
+                    gc.setStroke(Color.color(0.16, 0.20, 0.18, 0.45));
+                    gc.setLineWidth(1);
+                    gc.strokeLine(x + 5, y + 10 + mark % 6, x + 12, y + 12 + mark % 6);
+                    gc.strokeLine(x + 12, y + 12 + mark % 6, x + 16, y + 19 + mark % 6);
                 }
             }
             case DUNGEON -> {
-                gc.setStroke(Color.color(0.08, 0.10, 0.12, 0.44));
-                gc.setLineWidth(1.2);
-                gc.strokeLine(x + 7, y + 8, x + 12, y + 13);
-                gc.strokeLine(x + 12, y + 13, x + 10, y + 19);
-                gc.strokeLine(x + 12, y + 13, x + 18, y + 12);
+                if (tileId == Tile.FLOOR_STONE && mark < 11) {
+                    gc.setStroke(Color.color(0.08, 0.10, 0.12, 0.48));
+                    gc.setLineWidth(1.2);
+                    int crackX = 5 + mark % 10;
+                    gc.strokeLine(x + crackX, y + 5, x + crackX + 4, y + 11);
+                    gc.strokeLine(x + crackX + 4, y + 11, x + crackX + 1, y + 17);
+                    if (mark < 4)
+                        gc.strokeLine(x + crackX + 4, y + 11, x + crackX + 10, y + 10);
+                }
             }
             case BOSS_ARENA -> {
-                gc.setFill(Color.color(1, 0.36, 0.08, 0.55));
-                gc.fillOval(x + 7 + mark * 4, y + 20, 2.5, 2.5);
-                gc.setStroke(Color.color(0.35, 0.15, 0.12, 0.5));
-                gc.strokeLine(x + 20, y + 7, x + 25, y + 12);
+                int centerCol = cols / 2;
+                int centerRow = rows / 2;
+                int distance = Math.max(Math.abs(col - centerCol), Math.abs(row - centerRow));
+                if (distance <= 5 && (distance == 4 || distance == 5)) {
+                    gc.setStroke(Color.color(0.72, 0.28, 0.17, 0.52));
+                    gc.setLineWidth(1.5);
+                    if (row == centerRow - distance || row == centerRow + distance)
+                        gc.strokeLine(x + 3, y + 16, x + 29, y + 16);
+                    if (col == centerCol - distance || col == centerCol + distance)
+                        gc.strokeLine(x + 16, y + 3, x + 16, y + 29);
+                } else if (tileId == Tile.FLOOR_STONE && mark < 7) {
+                    gc.setFill(Color.color(1, 0.36, 0.08, 0.5));
+                    gc.fillOval(x + 7 + mark * 3, y + 20, 2, 2);
+                    gc.setStroke(Color.color(0.35, 0.15, 0.12, 0.5));
+                    gc.strokeLine(x + 20, y + 7, x + 25, y + 12);
+                }
             }
             case VILLAGE -> {
-                if (tileId == Tile.GRASS && mark == 0) {
-                    gc.setFill(Color.color(0.96, 0.81, 0.38, 0.7));
-                    gc.fillOval(x + 17, y + 10, 3, 3);
+                if (tileId == Tile.GRASS && mark < 6) {
+                    gc.setFill(Color.color(0.96, 0.81, 0.38, 0.72));
+                    gc.fillOval(x + 6 + mark, y + 8 + mark % 4, 2.5, 2.5);
                     gc.setFill(Color.color(0.9, 0.7, 0.35, 0.55));
-                    gc.fillOval(x + 20, y + 12, 2, 2);
+                    gc.fillOval(x + 9 + mark, y + 11 + mark % 3, 2, 2);
+                    if (mark < 2) {
+                        gc.setStroke(Color.color(0.28, 0.48, 0.22, 0.55));
+                        gc.strokeLine(x + 18, y + 27, x + 19, y + 21);
+                        gc.strokeLine(x + 19, y + 25, x + 23, y + 22);
+                    }
+                } else if (tileId == Tile.FLOOR_STONE && mark < 8) {
+                    renderPathWear(gc, x, y, row, col, mark, Tile.GRASS);
+                } else if (tileId == Tile.WATER && hasNeighbor(row, col, Tile.GRASS)) {
+                    gc.setStroke(Color.color(0.72, 0.88, 0.74, 0.38));
+                    gc.setLineWidth(1.2);
+                    gc.strokeLine(x + 4, y + 25 - mark % 5, x + 13, y + 25 - mark % 5);
+                    if (mark < 7) {
+                        gc.setFill(Color.color(0.55, 0.78, 0.45, 0.55));
+                        gc.fillOval(x + 2 + mark, y + 2, 4, 2);
+                    }
                 }
             }
         }
         gc.restore();
+    }
+
+    private void renderPathWear(GraphicsContext gc, int x, int y, int row, int col,
+                                int mark, int surroundingTile) {
+        gc.setStroke(Color.color(0.12, 0.13, 0.10, 0.42));
+        gc.setLineWidth(1);
+        if (row > 0 && groundLayer[row - 1][col] == surroundingTile)
+            gc.strokeLine(x + 1, y + 1, x + 31, y + 1);
+        if (col > 0 && groundLayer[row][col - 1] == surroundingTile)
+            gc.strokeLine(x + 1, y + 1, x + 1, y + 31);
+        if (mark < 5) {
+            gc.setFill(Color.color(0.82, 0.72, 0.51, 0.42));
+            gc.fillOval(x + 6 + mark * 3, y + 7 + mark % 4, 3, 2);
+            gc.fillOval(x + 20 - mark, y + 23 - mark % 5, 2, 2);
+        }
+    }
+
+    private boolean hasNeighbor(int row, int col, int tileId) {
+        return row > 0 && groundLayer[row - 1][col] == tileId
+                || row + 1 < rows && groundLayer[row + 1][col] == tileId
+                || col > 0 && groundLayer[row][col - 1] == tileId
+                || col + 1 < cols && groundLayer[row][col + 1] == tileId;
     }
     public void renderObjectLayer(GraphicsContext gc,Camera cam) {
         int sc=Math.max(0,cam.getOffsetX()/Tile.SIZE),sr=Math.max(0,cam.getOffsetY()/Tile.SIZE);
