@@ -127,6 +127,9 @@ public final class ModelStudio {
     private boolean inspectorOpen = true;
     private boolean toolboxOpen;
     private String selectedPartId;
+    private TransformOperation transformOperation;
+    private String transformAxis = "X";
+    private final StringBuilder transformInput = new StringBuilder();
     private double inspectorDividerPosition = 0.82;
     private double explorerDividerPosition = 0.24;
     private double dragStartX;
@@ -141,6 +144,9 @@ public final class ModelStudio {
     private HBox ribbonCommands;
     private Button undoRibbonButton;
     private Button redoRibbonButton;
+    private Button moveToolButton;
+    private Button rotateToolButton;
+    private Button scaleToolButton;
     private String activeRibbon = "Layout";
     private Label frameLabel;
 
@@ -188,6 +194,7 @@ public final class ModelStudio {
         Scene scene = new Scene(root, 1510, 900, true);
         stage.setScene(scene);
         scene.setOnKeyPressed(event -> {
+            if (transformOperation != null && handleTransformKey(event)) return;
             if (event.isControlDown() && event.getCode() == javafx.scene.input.KeyCode.S) {
                 if (event.isShiftDown()) saveComponent();
                 else saveModel();
@@ -205,6 +212,16 @@ public final class ModelStudio {
             } else if (event.getCode() == javafx.scene.input.KeyCode.F
                     && !(scene.getFocusOwner() instanceof TextField)) {
                 frameAll();
+                event.consume();
+            } else if (!(scene.getFocusOwner() instanceof TextField)
+                    && (event.getCode() == javafx.scene.input.KeyCode.G
+                    || event.getCode() == javafx.scene.input.KeyCode.R
+                    || event.getCode() == javafx.scene.input.KeyCode.S)) {
+                beginTransform(switch (event.getCode()) {
+                    case G -> TransformOperation.MOVE;
+                    case R -> TransformOperation.ROTATE;
+                    default -> TransformOperation.SCALE;
+                });
                 event.consume();
             } else if (event.getCode() == javafx.scene.input.KeyCode.DELETE
                     && !(scene.getFocusOwner() instanceof TextField)) {
@@ -580,6 +597,21 @@ public final class ModelStudio {
         });
     }
 
+    private void updateTransformToolStyles() {
+        setTransformToolStyle(moveToolButton, transformOperation == TransformOperation.MOVE);
+        setTransformToolStyle(rotateToolButton, transformOperation == TransformOperation.ROTATE);
+        setTransformToolStyle(scaleToolButton, transformOperation == TransformOperation.SCALE);
+    }
+
+    private void setTransformToolStyle(Button button, boolean active) {
+        if (button == null) return;
+        button.setStyle(active
+                ? "-fx-background-color: #3b555a; -fx-text-fill: #ffffff; -fx-border-color: #82b8b2;"
+                    + "-fx-background-radius: 6; -fx-border-radius: 6; -fx-padding: 5 8 5 8;"
+                : "-fx-background-color: #2a3437; -fx-text-fill: #edf2ef; -fx-border-color: #566264;"
+                    + "-fx-background-radius: 6; -fx-border-radius: 6; -fx-padding: 5 8 5 8;");
+    }
+
     private void clearModel() {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 "Remove every component from the current model?");
@@ -837,6 +869,9 @@ public final class ModelStudio {
             tool.setStyle("-fx-background-color: #2a3437; -fx-text-fill: #edf2ef; -fx-border-color: #566264;"
                     + "-fx-background-radius: 6; -fx-border-radius: 6; -fx-padding: 5 8 5 8;");
         }
+        moveToolButton = transformToolButton("Move", "G", TransformOperation.MOVE);
+        rotateToolButton = transformToolButton("Rotate", "R", TransformOperation.ROTATE);
+        scaleToolButton = transformToolButton("Scale", "S", TransformOperation.SCALE);
         toolboxOpenButton.setText("＋");
         toolboxOpenButton.setTooltip(new javafx.scene.control.Tooltip("Open Create / Assets shelf"));
         toolboxOpenButton.setMaxWidth(Double.MAX_VALUE);
@@ -846,7 +881,8 @@ public final class ModelStudio {
 
         Label shelfLabel = new Label("TOOLS");
         shelfLabel.setStyle("-fx-text-fill: #9aa6a3; -fx-font-size: 9px; -fx-font-weight: bold; -fx-letter-spacing: 1.2px;");
-        VBox toolShelf = new VBox(5, shelfLabel, toolboxOpenButton, selectTool, boxSelectToggle, brushToggle);
+        VBox toolShelf = new VBox(5, shelfLabel, toolboxOpenButton, selectTool,
+                moveToolButton, rotateToolButton, scaleToolButton, boxSelectToggle, brushToggle);
         toolShelf.setPrefWidth(90);
         toolShelf.setMaxWidth(90);
         toolShelf.setPadding(new Insets(9, 8, 9, 8));
@@ -961,6 +997,169 @@ public final class ModelStudio {
         StackPane.setAlignment(inspectorRevealButton, Pos.TOP_RIGHT);
         StackPane.setMargin(inspectorRevealButton, new Insets(12));
         return viewportPane;
+    }
+
+    private Button transformToolButton(String label, String shortcut, TransformOperation operation) {
+        Button button = new Button(label);
+        button.setMaxWidth(Double.MAX_VALUE);
+        button.setTooltip(new javafx.scene.control.Tooltip(
+                label + " selected scene objects. Shortcut: " + shortcut
+                        + ", then choose X/Y/Z, enter a value, and press Enter."));
+        button.setOnAction(event -> beginTransform(operation));
+        button.setStyle("-fx-background-color: #2a3437; -fx-text-fill: #edf2ef;"
+                + "-fx-border-color: #566264; -fx-background-radius: 6;"
+                + "-fx-border-radius: 6; -fx-padding: 5 8 5 8;");
+        return button;
+    }
+
+    private void beginTransform(TransformOperation operation) {
+        if (selectedParts().isEmpty()) {
+            statusLabel.setText("Select one or more scene objects before transforming");
+            return;
+        }
+        if (!validateFields()) return;
+        transformOperation = operation;
+        transformAxis = "X";
+        transformInput.setLength(0);
+        updateTransformToolStyles();
+        updateTransformStatus();
+    }
+
+    private boolean handleTransformKey(javafx.scene.input.KeyEvent event) {
+        javafx.scene.input.KeyCode code = event.getCode();
+        if (code == javafx.scene.input.KeyCode.ESCAPE) {
+            transformOperation = null;
+            updateTransformToolStyles();
+            statusLabel.setText("Transform cancelled");
+            event.consume();
+            return true;
+        }
+        if (code == javafx.scene.input.KeyCode.ENTER) {
+            applyViewportTransform();
+            event.consume();
+            return true;
+        }
+        if (code == javafx.scene.input.KeyCode.BACK_SPACE) {
+            if (!transformInput.isEmpty()) transformInput.deleteCharAt(transformInput.length() - 1);
+            updateTransformStatus();
+            event.consume();
+            return true;
+        }
+        if (code == javafx.scene.input.KeyCode.X || code == javafx.scene.input.KeyCode.Y
+                || code == javafx.scene.input.KeyCode.Z) {
+            transformAxis = code.getName();
+            updateTransformStatus();
+            event.consume();
+            return true;
+        }
+        String text = event.getText();
+        if (text != null && text.length() == 1) {
+            char character = text.charAt(0);
+            if (Character.isDigit(character) || (character == '.' && !transformInput.toString().contains("."))
+                    || (character == '-' && transformInput.isEmpty())) {
+                transformInput.append(character);
+                updateTransformStatus();
+                event.consume();
+                return true;
+            }
+        }
+        event.consume();
+        return true;
+    }
+
+    private void updateTransformStatus() {
+        String action = switch (transformOperation) {
+            case MOVE -> "Move";
+            case ROTATE -> "Rotate";
+            case SCALE -> "Resize";
+        };
+        String units = transformOperation == TransformOperation.ROTATE ? "°" : "";
+        statusLabel.setText(action + " · axis " + transformAxis + " · value "
+                + (transformInput.isEmpty() ? "—" : transformInput) + units
+                + " · type value, Enter to apply, Esc to cancel");
+    }
+
+    private void applyViewportTransform() {
+        double amount;
+        try {
+            amount = transformInput.isEmpty()
+                    ? switch (transformOperation) {
+                        case MOVE -> 1;
+                        case ROTATE -> 15;
+                        case SCALE -> 1.1;
+                    }
+                    : Double.parseDouble(transformInput.toString());
+        } catch (NumberFormatException exception) {
+            statusLabel.setText("Invalid transform value");
+            return;
+        }
+        if (!Double.isFinite(amount) || (transformOperation == TransformOperation.SCALE && amount <= 0)) {
+            statusLabel.setText(transformOperation == TransformOperation.SCALE
+                    ? "Scale factor must be finite and greater than zero"
+                    : "Transform value must be finite");
+            return;
+        }
+
+        List<CustomModelDefinition.Part> selected = selectedParts();
+        List<CustomModelDefinition.Part> roots = selected.stream()
+                .filter(part -> selected.stream().noneMatch(candidate ->
+                        candidate != part && isDescendant(candidate, part)))
+                .toList();
+        if (roots.isEmpty()) {
+            transformOperation = null;
+            statusLabel.setText("No scene objects selected");
+            return;
+        }
+        TransformOperation appliedOperation = transformOperation;
+        String appliedAxis = transformAxis;
+        if (roots.stream().anyMatch(part ->
+                !isValidTransformResult(part, appliedOperation, appliedAxis, amount))) {
+            statusLabel.setText("Transform would create an invalid component value");
+            return;
+        }
+        performEdit(() -> {
+            applyFields();
+            for (CustomModelDefinition.Part part : roots) {
+                switch (appliedOperation) {
+                    case MOVE -> {
+                        if (appliedAxis.equals("X")) part.x += amount;
+                        else if (appliedAxis.equals("Y")) part.y += amount;
+                        else part.z += amount;
+                    }
+                    case ROTATE -> {
+                        if (appliedAxis.equals("X")) part.rotateX += amount;
+                        else if (appliedAxis.equals("Y")) part.rotateY += amount;
+                        else part.rotateZ += amount;
+                    }
+                    case SCALE -> {
+                        if (appliedAxis.equals("X")) part.width *= amount;
+                        else if (appliedAxis.equals("Y")) part.height *= amount;
+                        else part.depth *= amount;
+                    }
+                }
+            }
+            refreshPreview();
+            CustomModelDefinition.Part active = selectedPart();
+            if (active != null) showPart(active);
+        });
+        transformOperation = null;
+        updateTransformToolStyles();
+        statusLabel.setText(switch (appliedOperation) {
+            case MOVE -> "Moved " + roots.size() + " selected component(s) on " + appliedAxis;
+            case ROTATE -> "Rotated " + roots.size() + " selected component(s) on " + appliedAxis;
+            case SCALE -> "Resized " + roots.size() + " selected component(s) on " + appliedAxis;
+        });
+    }
+
+    private boolean isValidTransformResult(CustomModelDefinition.Part part,
+                                           TransformOperation operation, String axis, double amount) {
+        double current = switch (operation) {
+            case MOVE -> axis.equals("X") ? part.x : axis.equals("Y") ? part.y : part.z;
+            case ROTATE -> axis.equals("X") ? part.rotateX : axis.equals("Y") ? part.rotateY : part.rotateZ;
+            case SCALE -> axis.equals("X") ? part.width : axis.equals("Y") ? part.height : part.depth;
+        };
+        double result = operation == TransformOperation.SCALE ? current * amount : current + amount;
+        return Double.isFinite(result) && (operation != TransformOperation.SCALE || result > 0);
     }
 
     private void frameAll() {
@@ -1655,6 +1854,8 @@ public final class ModelStudio {
         item.setExpanded(true);
         for (TreeItem<CustomModelDefinition.Part> child : item.getChildren()) expandTree(child);
     }
+
+    private enum TransformOperation { MOVE, ROTATE, SCALE }
 
     private enum TreeDropPosition { BEFORE, CHILD, AFTER }
 
