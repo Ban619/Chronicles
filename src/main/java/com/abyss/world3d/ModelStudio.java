@@ -209,7 +209,11 @@ public final class ModelStudio {
         stage.setScene(scene);
         scene.setOnKeyPressed(event -> {
             if (transformOperation != null && handleTransformKey(event)) return;
-            if (event.isControlDown() && event.getCode() == javafx.scene.input.KeyCode.S) {
+            if (event.isControlDown() && event.getCode() == javafx.scene.input.KeyCode.A
+                    && !(scene.getFocusOwner() instanceof javafx.scene.control.TextInputControl)) {
+                selectVisibleParts();
+                event.consume();
+            } else if (event.isControlDown() && event.getCode() == javafx.scene.input.KeyCode.S) {
                 if (event.isShiftDown()) saveComponent();
                 else saveModel();
                 event.consume();
@@ -1057,7 +1061,7 @@ public final class ModelStudio {
             event.consume();
         });
 
-        Label hint = new Label("Shift-click or Shift+box-drag to add selection · Middle-drag to orbit · Shift+middle-drag to pan");
+        Label hint = new Label("Ctrl+A selects visible Outliner rows · Shift-click/box-drag adds · Middle-drag orbits · Shift+middle-drag pans");
         hint.setStyle("-fx-text-fill: #a7b0a8; -fx-background-color: #171e20cc; -fx-padding: 8 12 8 12;");
         inspectorRevealButton.setOnAction(event -> revealInspector());
         inspectorRevealButton.setStyle("-fx-text-fill: #e4d9bf; -fx-background-color: #202729; -fx-border-color: #6f7d74; -fx-padding: 8 12 8 12;");
@@ -2151,6 +2155,29 @@ public final class ModelStudio {
         } else {
             selectedPartId = null;
             statusLabel.setText("Box select found no parts");
+        }
+        drawTransformGizmo();
+    }
+
+    private void selectVisibleParts() {
+        partList.getSelectionModel().clearSelection();
+        CustomModelDefinition.Part lastSelected = null;
+        for (CustomModelDefinition.Part part : parts) {
+            if (!isEffectivelyVisible(part)) continue;
+            TreeItem<CustomModelDefinition.Part> item = findTreeItem(partList.getRoot(), part);
+            if (item != null) {
+                partList.getSelectionModel().select(item);
+                lastSelected = part;
+            }
+        }
+        if (lastSelected == null) {
+            selectedPartId = null;
+            statusLabel.setText("No visible Outliner objects to select");
+        } else {
+            selectedPartId = lastSelected.id;
+            showPart(lastSelected);
+            statusLabel.setText("Selected " + partList.getSelectionModel().getSelectedItems().size()
+                    + " visible Outliner component(s)");
         }
         drawTransformGizmo();
     }
