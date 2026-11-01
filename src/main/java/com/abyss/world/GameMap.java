@@ -97,21 +97,22 @@ public class GameMap {
         fill(Tile.GRASS);
         border(Tile.WALL_STONE);
         int mid = rows / 2;
-        for (int c = 4; c < cols-4; c++) { groundLayer[mid][c]=Tile.WATER; groundLayer[mid+1][c]=Tile.WATER; }
-        for (int c = cols / 2 - 1; c < cols; c++) {
-            groundLayer[mid][c] = Tile.BRIDGE;
-            groundLayer[mid + 1][c] = Tile.BRIDGE;
+        int riverStart = Math.max(4, mid - 1);
+        int riverEnd = Math.min(rows - 5, mid + 2);
+        for (int r = riverStart; r < riverEnd; r++) {
+            for (int c = 4; c < cols - 4; c++) groundLayer[r][c] = Tile.WATER;
         }
-        for (int c = 5; c < cols - 5; c++) groundLayer[mid - 2][c] = Tile.FLOOR_STONE;
+        for (int c = cols / 2 - 1; c < cols - 1; c++) {
+            for (int r = riverStart; r < riverEnd; r++) groundLayer[r][c] = Tile.BRIDGE;
+        }
+        paintPath(3, mid - 4, cols - 2, mid - 3, Tile.FLOOR_STONE);
         for (int r = mid; r < rows; r++) {
-            groundLayer[r][cols / 2 - 1] = Tile.DIRT;
-            groundLayer[r][cols / 2] = Tile.DIRT;
-            groundLayer[r][cols / 2 + 1] = Tile.DIRT;
-            objectLayer[r][cols / 2 - 1] = 0;
-            objectLayer[r][cols / 2] = 0;
-            objectLayer[r][cols / 2 + 1] = 0;
+            paintPath(cols / 2 - 1, r, cols / 2 + 1, r, Tile.DIRT);
         }
         for (int r = mid - 4; r <= mid + 4; r++) objectLayer[r][cols - 1] = 0;
+        paintPath(6, mid - 8, 17, mid - 5, Tile.FLOOR_STONE);
+        paintPath(18, mid - 6, 25, mid - 3, Tile.FLOOR_STONE);
+
         int[][] trees = {{3,3},{4,3},{8,2},{9,2},{cols-4,3},{cols-5,4},{2,rows-3},{cols-3,rows-4}};
         for (int[] t : trees) {
             if (inBounds(t[1],t[0])) { objectLayer[t[1]][t[0]]=Tile.TREE_BASE; if(inBounds(t[1]-1,t[0])) overlayLayer[t[1]-1][t[0]]=Tile.TREE_TOP; }
@@ -121,6 +122,21 @@ public class GameMap {
         objectLayer[3][cols-8]=Tile.TORCH; objectLayer[3][cols-4]=Tile.TORCH;
         objectLayer[4][cols-6]=Tile.CHEST; objectLayer[rows-6][4]=Tile.CHEST;
         startX=7*Tile.SIZE; startY=(mid-4)*Tile.SIZE;
+    }
+
+    private void paintPath(int startCol, int startRow, int endCol, int endRow, int tileId) {
+        for (int row = Math.max(1, startRow); row <= Math.min(rows - 2, endRow); row++) {
+            for (int col = Math.max(1, startCol); col <= Math.min(cols - 2, endCol); col++) {
+                groundLayer[row][col] = tileId;
+                objectLayer[row][col] = 0;
+                overlayLayer[row][col] = 0;
+            }
+        }
+    }
+
+    private void clearArea(int centerCol, int centerRow, int radiusCol, int radiusRow) {
+        paintPath(centerCol - radiusCol, centerRow - radiusRow,
+                centerCol + radiusCol, centerRow + radiusRow, groundLayer[centerRow][centerCol]);
     }
 
     // ── THORNWOOD FOREST ──────────────────────────────────────────────────
@@ -135,21 +151,19 @@ public class GameMap {
                 if (r>0) overlayLayer[r-1][c]=Tile.TREE_TOP;
             }
         }
-        int pathCol=cols/2;
-        for (int r=0;r<rows;r++) for (int dc=-1;dc<=1;dc++) {
-            int c=pathCol+dc;
-            if (inBounds(r,c)) { groundLayer[r][c]=Tile.DIRT; objectLayer[r][c]=0; overlayLayer[r][c]=0; }
-        }
-            for (int c=0;c<=pathCol;c++) {
-                groundLayer[rows/2][c]=Tile.DIRT;
-                objectLayer[rows/2][c]=0;
-                overlayLayer[rows/2][c]=0;
-            }
+        int pathCol = cols / 2;
+        paintPath(pathCol - 2, 0, pathCol + 2, rows - 1, Tile.DIRT);
+        paintPath(0, rows / 2 - 2, pathCol + 1, rows / 2 + 2, Tile.DIRT);
+        clearArea(pathCol + 3, 7, 7, 4);
+        clearArea(pathCol - 3, rows / 2, 8, 6);
+        clearArea(cols / 4, rows / 2, 4, 3);
+
         // Glowing mushrooms as dim lights
         int mushroomCount = 7 + rng.nextInt(8);
         for (int i=0;i<mushroomCount;i++) {
             int mr=3+rng.nextInt(rows-6), mc=3+rng.nextInt(cols-6);
-            if (objectLayer[mr][mc]==0) objectLayer[mr][mc]=Tile.TORCH;
+            if (objectLayer[mr][mc]==0 && groundLayer[mr][mc] != Tile.DIRT)
+                objectLayer[mr][mc]=Tile.TORCH;
         }
         // East stream
         int streamCol = Math.max(pathCol + 5, cols - 4 - rng.nextInt(4));
@@ -160,11 +174,20 @@ public class GameMap {
             if (streamCol > 0) groundLayer[r][streamCol-1]=Tile.WATER;
         }
         // Stone ruins cluster
-        int ruinRow = Math.min(rows - 8, rows / 2 + 2 + rng.nextInt(7));
-        int ruinCol = Math.max(2, pathCol - 12 + rng.nextInt(6));
-        for (int r=ruinRow;r<ruinRow+4;r++) for (int c=ruinCol;c<ruinCol+4;c++)
-            if (rng.nextBoolean()) objectLayer[r][c]=Tile.WALL_STONE;
-        startX=pathCol*Tile.SIZE; startY=2*Tile.SIZE;
+        int ruinRow = Math.min(rows - 9, rows / 2 + 5);
+        int ruinCol = Math.max(3, pathCol - 13);
+        paintPath(ruinCol + 1, ruinRow + 1, ruinCol + 7, ruinRow + 5, Tile.FLOOR_STONE);
+        for (int c = ruinCol; c <= ruinCol + 8; c++) {
+            if (inBounds(ruinRow, c)) objectLayer[ruinRow][c] = Tile.WALL_STONE;
+            if (inBounds(ruinRow + 6, c) && c != ruinCol + 4)
+                objectLayer[ruinRow + 6][c] = Tile.WALL_STONE;
+        }
+        for (int r = ruinRow; r <= ruinRow + 6; r++) {
+            if (inBounds(r, ruinCol)) objectLayer[r][ruinCol] = Tile.WALL_STONE;
+            if (inBounds(r, ruinCol + 8)) objectLayer[r][ruinCol + 8] = Tile.WALL_STONE;
+        }
+        startX = pathCol * Tile.SIZE;
+        startY = 2 * Tile.SIZE;
     }
 
     // ── CRYPT OF ECHOES (Dungeon) ─────────────────────────────────────────
@@ -218,8 +241,17 @@ public class GameMap {
         int cx=cols/2, cy=rows/2, radius=Math.min(cols,rows)/2-3;
         for (int r=0;r<rows;r++) for (int c=0;c<cols;c++) {
             double dist=Math.sqrt((c-cx)*(c-cx)+(r-cy)*(r-cy));
-            if (dist<radius*0.25)   groundLayer[r][c]=Tile.LAVA;
-            else if (dist<radius)   { groundLayer[r][c]=Tile.FLOOR_STONE; objectLayer[r][c]=0; }
+            if (dist < radius) {
+                objectLayer[r][c] = 0;
+                groundLayer[r][c] = dist < radius * 0.24
+                        ? Tile.FLOOR_STONE : dist < radius * 0.36 ? Tile.LAVA : Tile.FLOOR_STONE;
+            }
+        }
+        for (int offset = -1; offset <= 1; offset++) {
+            for (int row = Math.max(1, cy - radius); row <= Math.min(rows - 2, cy + radius); row++)
+                paintPath(cx + offset, row, cx + offset, row, Tile.FLOOR_STONE);
+            for (int col = Math.max(1, cx - radius); col <= Math.min(cols - 2, cx + radius); col++)
+                paintPath(col, cy + offset, col, cy + offset, Tile.FLOOR_STONE);
         }
         for (int angle=0;angle<360;angle+=45) {
             int pc=(int)(cx+(radius-2)*Math.cos(Math.toRadians(angle)));
