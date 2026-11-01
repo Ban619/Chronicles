@@ -1709,6 +1709,12 @@ public final class ModelStudio {
         Button showAll = new Button("Show All");
         showAll.setTooltip(new javafx.scene.control.Tooltip("Reveal every hidden scene object"));
         showAll.setOnAction(event -> showAllComponents());
+        Button selectParent = new Button("Parent");
+        selectParent.setTooltip(new javafx.scene.control.Tooltip("Select the active component's parent"));
+        selectParent.setOnAction(event -> selectRelatedHierarchy(false));
+        Button selectDescendants = new Button("Kids");
+        selectDescendants.setTooltip(new javafx.scene.control.Tooltip("Select all visible descendants of the active component"));
+        selectDescendants.setOnAction(event -> selectRelatedHierarchy(true));
         duplicate.setText("Dup");
         moveUp.setText("Up");
         moveDown.setText("Down");
@@ -1718,7 +1724,9 @@ public final class ModelStudio {
         hierarchyActions.setVgap(6);
         hierarchyActions.setMinHeight(0);
         hierarchyActions.setMaxWidth(Double.MAX_VALUE);
-        Button[] hierarchyButtons = {duplicate, moveUp, moveDown, hide, showAll, remove};
+        Button[] hierarchyButtons = {
+                duplicate, moveUp, moveDown, hide, showAll, remove, selectParent, selectDescendants
+        };
         for (int index = 0; index < hierarchyButtons.length; index++) {
             int column = index % 3;
             int row = index / 3;
@@ -1737,7 +1745,7 @@ public final class ModelStudio {
             constraints.setMinWidth(0);
             hierarchyActions.getColumnConstraints().add(constraints);
         }
-        for (int row = 0; row < 2; row++) {
+        for (int row = 0; row < 3; row++) {
             RowConstraints actionRow = new RowConstraints();
             actionRow.setMinHeight(26);
             actionRow.setPrefHeight(26);
@@ -2101,6 +2109,54 @@ public final class ModelStudio {
         refreshPartVisibility();
         refreshPartList(selectedPartIndex());
         statusLabel.setText("All scene objects are visible");
+    }
+
+    private void selectRelatedHierarchy(boolean descendants) {
+        CustomModelDefinition.Part active = selectedPart();
+        if (active == null) {
+            statusLabel.setText("Select a component first");
+            return;
+        }
+
+        List<CustomModelDefinition.Part> related;
+        if (descendants) {
+            related = parts.stream()
+                    .filter(part -> isDescendant(active, part))
+                    .filter(this::isEffectivelyVisible)
+                    .filter(part -> findTreeItem(partList.getRoot(), part) != null)
+                    .toList();
+        } else {
+            CustomModelDefinition.Part parent = active.parentId == null
+                    ? null : findPart(active.parentId);
+            related = parent == null || !isEffectivelyVisible(parent)
+                    || findTreeItem(partList.getRoot(), parent) == null
+                    ? List.of() : List.of(parent);
+        }
+
+        if (related.isEmpty()) {
+            statusLabel.setText(descendants
+                    ? "No visible descendants to select"
+                    : "No visible parent to select");
+            return;
+        }
+
+        partList.getSelectionModel().clearSelection();
+        TreeItem<CustomModelDefinition.Part> lastItem = null;
+        for (CustomModelDefinition.Part part : related) {
+            TreeItem<CustomModelDefinition.Part> item = findTreeItem(partList.getRoot(), part);
+            if (item != null) {
+                partList.getSelectionModel().select(item);
+                lastItem = item;
+            }
+        }
+        if (lastItem != null) {
+            CustomModelDefinition.Part selected = lastItem.getValue();
+            selectedPartId = selected.id;
+            showPart(selected);
+            statusLabel.setText("Selected " + related.size()
+                    + (descendants ? " visible descendant(s)" : " parent component"));
+        }
+        drawTransformGizmo();
     }
 
     private void refreshPartVisibility() {
