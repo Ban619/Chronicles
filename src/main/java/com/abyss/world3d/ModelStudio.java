@@ -124,6 +124,8 @@ public final class ModelStudio {
     private boolean rebuildingPartTree;
     private boolean viewportOnly;
     private boolean boxSelecting;
+    private boolean viewportNavigationDragging;
+    private boolean panningViewport;
     private boolean inspectorOpen = true;
     private boolean toolboxOpen;
     private String selectedPartId;
@@ -790,7 +792,11 @@ public final class ModelStudio {
         preview.setOnMousePressed(event -> {
             dragX = dragStartX = event.getSceneX();
             dragY = dragStartY = event.getSceneY();
-            if (event.getButton() == MouseButton.PRIMARY && boxSelectToggle.isSelected()
+            if (event.getButton() == MouseButton.MIDDLE) {
+                viewportNavigationDragging = true;
+                panningViewport = event.isShiftDown();
+                event.consume();
+            } else if (event.getButton() == MouseButton.PRIMARY && boxSelectToggle.isSelected()
                     && !brushToggle.isSelected()) {
                 boxSelecting = true;
                 selectionStartX = event.getX();
@@ -804,13 +810,30 @@ public final class ModelStudio {
                 event.consume();
                 return;
             }
-            yaw.setAngle(yaw.getAngle() + (event.getSceneX() - dragX) * 0.7);
-            pitch.setAngle(Math.max(-78, Math.min(12,
-                    pitch.getAngle() + (event.getSceneY() - dragY) * 0.7)));
+            double deltaX = event.getSceneX() - dragX;
+            double deltaY = event.getSceneY() - dragY;
+            if (viewportNavigationDragging && panningViewport) {
+                double worldUnitsPerPixel = 2 * cameraDistance
+                        * Math.tan(Math.toRadians(previewCamera.getFieldOfView()) / 2)
+                        / Math.max(1, preview.getHeight());
+                previewCamera.setTranslateX(previewCamera.getTranslateX() - deltaX * worldUnitsPerPixel);
+                previewCamera.setTranslateY(previewCamera.getTranslateY() - deltaY * worldUnitsPerPixel);
+            } else if (viewportNavigationDragging) {
+                yaw.setAngle(yaw.getAngle() + deltaX * 0.7);
+                pitch.setAngle(Math.max(-78, Math.min(12,
+                        pitch.getAngle() + deltaY * 0.7)));
+            }
             dragX = event.getSceneX();
             dragY = event.getSceneY();
+            if (viewportNavigationDragging) event.consume();
         });
         preview.setOnMouseReleased(event -> {
+            if (viewportNavigationDragging) {
+                viewportNavigationDragging = false;
+                panningViewport = false;
+                event.consume();
+                return;
+            }
             if (!boxSelecting) return;
             boxSelecting = false;
             double endX = event.getX();
@@ -822,6 +845,7 @@ public final class ModelStudio {
             event.consume();
         });
         preview.setOnMouseClicked(event -> {
+            if (event.getButton() != MouseButton.PRIMARY) return;
             if (Math.hypot(event.getSceneX() - dragStartX, event.getSceneY() - dragStartY) > 4) return;
             Node pickedNode = event.getPickResult().getIntersectedNode();
             if (brushToggle.isSelected()) paintPickedComponent(pickedNode);
@@ -974,7 +998,7 @@ public final class ModelStudio {
             event.consume();
         });
 
-        Label hint = new Label("Drag to orbit   ·   Box select for area selection   ·   Scroll to zoom");
+        Label hint = new Label("Middle-drag to orbit · Shift+middle-drag to pan · Scroll to zoom");
         hint.setStyle("-fx-text-fill: #a7b0a8; -fx-background-color: #171e20cc; -fx-padding: 8 12 8 12;");
         inspectorRevealButton.setOnAction(event -> revealInspector());
         inspectorRevealButton.setStyle("-fx-text-fill: #e4d9bf; -fx-background-color: #202729; -fx-border-color: #6f7d74; -fx-padding: 8 12 8 12;");
@@ -1168,6 +1192,7 @@ public final class ModelStudio {
             previewWorld.setTranslateY(0);
             previewWorld.setTranslateZ(0);
             cameraDistance = 190;
+            previewCamera.setTranslateX(0);
             previewCamera.setTranslateY(-55);
             previewCamera.setTranslateZ(-cameraDistance);
             statusLabel.setText("Viewport reset · no scene objects to frame");
@@ -1189,6 +1214,7 @@ public final class ModelStudio {
         double horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
         double limitingFov = Math.min(verticalFov, horizontalFov);
         cameraDistance = Math.max(30, Math.min(2500, radius / Math.tan(limitingFov / 2) * 1.2));
+        previewCamera.setTranslateX(0);
         previewCamera.setTranslateY(0);
         previewCamera.setTranslateZ(-cameraDistance);
         statusLabel.setText("Framed all " + parts.size() + " scene object(s)");
