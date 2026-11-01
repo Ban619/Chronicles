@@ -1,5 +1,6 @@
 package com.abyss.entities;
 
+import com.abyss.campaign.ChapterOneProgress;
 import com.abyss.items.Item;
 import com.abyss.items.Equipment;
 import com.abyss.items.Consumable;
@@ -48,8 +49,8 @@ public class Player extends Entity {
     private int    luck      = 3;
     private int    gold       = 150;
     private int    reputation = 0;       // -100 (villain) … +100 (hero)
-    private int roadQuestStage;
-    private int roadQuestKills;
+    private final ChapterOneProgress chapterOne = new ChapterOneProgress();
+    private boolean tutorialComplete;
 
     // ── Customisation ─────────────────────────────────────────────────────
     private String  hairStyle  = "short";
@@ -320,6 +321,10 @@ public class Player extends Entity {
         return count;
     }
 
+    public boolean hasItem(String id) {
+        return id != null && countItems(id) > 0;
+    }
+
     public boolean removeItems(java.util.Map<String, Integer> required) {
         for (var entry : required.entrySet()) {
             if (entry.getValue() < 0 || countItems(entry.getKey()) < entry.getValue()) return false;
@@ -454,12 +459,20 @@ public class Player extends Entity {
     public int    getGold()        { return gold; }
     public int    getReputation()  { return reputation; }
     public boolean isAlive()       { return hp > 0; }
+    public void recoverAfterDefeat(GameMap map) {
+        heal(Math.max(1, getMaxHp() / 2));
+        restoreMp(getMaxMp());
+        stopMoving();
+        setX(map.getStartX());
+        setY(map.getStartY());
+    }
     public Item[]           getInventory()  { return inventory; }
     public Equipment        getEquipment()  { return equipment; }
     public List<PartyMember> getParty()     { return party; }
     public int    getHotbarSlot()  { return hotbarSlot; }
-    public int getRoadQuestStage() { return roadQuestStage; }
-    public int getRoadQuestKills() { return roadQuestKills; }
+    public ChapterOneProgress getChapterOne() { return chapterOne; }
+    public boolean isTutorialComplete() { return tutorialComplete; }
+    public void completeTutorial() { tutorialComplete = true; }
     public String getHairStyle()   { return hairStyle; }
     public Color  getHairColor()   { return hairColor; }
     public Color  getSkinTone()    { return skinTone; }
@@ -474,22 +487,6 @@ public class Player extends Entity {
     public void addGold(int g)              { gold += g; }
     public void spendGold(int g)            { gold = Math.max(0, gold - g); }
     public void adjustReputation(int delta) { reputation = Math.max(-100, Math.min(100, reputation + delta)); }
-    public boolean acceptRoadQuest() {
-        if (roadQuestStage != 0) return false;
-        roadQuestStage = 1;
-        roadQuestKills = 0;
-        return true;
-    }
-    public boolean recordRoadQuestKill() {
-        if (roadQuestStage != 1 || roadQuestKills >= 3) return false;
-        roadQuestKills++;
-        return true;
-    }
-    public boolean completeRoadQuest() {
-        if (roadQuestStage != 1 || roadQuestKills < 3) return false;
-        roadQuestStage = 2;
-        return true;
-    }
     public void setHairStyle(String s)      { hairStyle = s; }
     public void setHairColor(Color c)       { hairColor = c; }
     public void setSkinTone(Color c)        { skinTone = c; }
@@ -516,8 +513,8 @@ public class Player extends Entity {
         m.put("luck",       luck);
         m.put("gold",       gold);
         m.put("reputation", reputation);
-        m.put("roadQuestStage", roadQuestStage);
-        m.put("roadQuestKills", roadQuestKills);
+        m.put("chapterOne", chapterOne.toSaveMap());
+        m.put("tutorialComplete", tutorialComplete);
         m.put("hairStyle",  hairStyle);
         m.put("clothing",   clothing);
         m.put("accessory",  accessory);
@@ -544,8 +541,9 @@ public class Player extends Entity {
         luck = Math.max(0, savedInt(data, "luck", luck));
         gold = Math.max(0, savedInt(data, "gold", gold));
         reputation = Math.max(-100, Math.min(100, savedInt(data, "reputation", reputation)));
-        roadQuestStage = Math.max(0, Math.min(2, savedInt(data, "roadQuestStage", 0)));
-        roadQuestKills = Math.max(0, Math.min(3, savedInt(data, "roadQuestKills", 0)));
+        Object campaignData = data.get("chapterOne");
+        chapterOne.restoreFromSaveMap(campaignData instanceof java.util.Map<?, ?> values ? values : null);
+        tutorialComplete = Boolean.TRUE.equals(data.get("tutorialComplete"));
         hairStyle = savedString(data, "hairStyle", hairStyle);
         clothing = savedString(data, "clothing", clothing);
         accessory = savedString(data, "accessory", accessory);

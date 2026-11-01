@@ -1,5 +1,6 @@
 package com.abyss.world;
 
+import com.abyss.campaign.ChapterOneProgress;
 import com.abyss.entities.*;
 import com.abyss.items.Consumable;
 import com.abyss.items.Item;
@@ -47,6 +48,8 @@ public class GameMap {
     private final AssetLoader assetLoader;
     private Image tileset;
     private final Random layoutRandom;
+    private int relicCol = -1;
+    private int relicRow = -1;
 
     // ─────────────────────────────────────────────────────────────────────
     public GameMap(String mapPath, AssetLoader loader) {
@@ -192,6 +195,9 @@ public class GameMap {
         if (inBounds(4*sy,26*sx))  objectLayer[4*sy][26*sx] =Tile.CHEST;
         if (inBounds(4*sy,23*sx))  objectLayer[4*sy][23*sx] =Tile.CHEST;
         if (inBounds(15*sy,22*sx)) objectLayer[15*sy][22*sx]=Tile.CHEST;
+        relicCol = 20 * sx;
+        relicRow = 24 * sy;
+        if (inBounds(relicRow, relicCol)) objectLayer[relicRow][relicCol] = Tile.CHEST;
         startX=5*sx*Tile.SIZE; startY=4*sy*Tile.SIZE;
     }
 
@@ -283,7 +289,7 @@ public class GameMap {
                 transitions.add(new MapTransition(
                     cols/2f*Tile.SIZE-Tile.SIZE, (rows-1)*Tile.SIZE, 3*Tile.SIZE, Tile.SIZE,
                         "maps/dragons_maw.json", 28, 2,
-                    MapTransition.Direction.SOUTH, "Dragon's Maw"));
+                    MapTransition.Direction.SOUTH, "Dragon's Maw", "crypt_relic"));
             }
             case DUNGEON -> {
                 transitions.add(new MapTransition(
@@ -398,10 +404,18 @@ public class GameMap {
         if (!enemy.markDefeated()) return false;
         player.gainXp(enemy.getXpReward());
         player.addGold(enemy.getGoldReward());
-        if (player.recordRoadQuestKill()) {
+        if (player.getChapterOne().recordForestDefeat(
+                biome == Biome.FOREST, enemy.isBoss())) {
             spawnParticle(player.getX(), player.getY() - 30,
-                    "Road quest: " + player.getRoadQuestKills() + "/3 enemies",
+                    "Thornwood: " + player.getChapterOne().getForestDefeats() + "/3 foes",
                     Color.web("#f0c040"));
+        }
+        if (biome == Biome.BOSS_ARENA && enemy.isBoss()
+                && player.getChapterOne().defeatMalachar()) {
+            player.addGold(200);
+            player.gainXp(250);
+            spawnParticle(player.getX(), player.getY() - 30,
+                    "Malachar falls! Return to Elder Aldric.", Color.web("#f0c040"));
         }
         dropCraftingLoot(enemy);
         spawnParticle(enemy.getX(), enemy.getY() - 12,
@@ -493,21 +507,55 @@ public class GameMap {
             }
             if (nearestNpc != null) {
                 if ("Elder Aldric".equals(nearestNpc.getName())) {
-                    if (player.getRoadQuestStage() == 0) {
-                        player.acceptRoadQuest();
-                        return "Quest accepted: Clear 3 enemies from the road, then return to Elder Aldric.";
+                    ChapterOneProgress progress = player.getChapterOne();
+                    switch (progress.getStage()) {
+                        case MEET_ELDER -> {
+                            progress.acceptQuest();
+                            return "Elder Aldric: Thornwood's road is overrun. Defeat 3 enemies there, then return. "
+                                    + "The southern Crypt may hold the seal we need.";
+                        }
+                        case CLEAR_THORNWOOD -> {
+                            return "Elder Aldric: Thornwood is still dangerous. Foes defeated: "
+                                    + progress.getForestDefeats() + "/3.";
+                        }
+                        case RETURN_TO_ELDER -> {
+                            progress.turnInRoadQuest();
+                            player.addGold(120);
+                            player.gainXp(100);
+                            player.adjustReputation(15);
+                            return "Quest complete! You earned 120 gold, 100 XP, and 15 reputation. "
+                                    + "Enter the southern Crypt and recover the Dawn Seal.";
+                        }
+                        case FIND_CRYPT_RELIC -> {
+                            return "Elder Aldric: The Dawn Seal lies in the deepest Crypt chamber. "
+                                    + "Bring it through Thornwood to Dragon's Maw.";
+                        }
+                        case DEFEAT_MALACHAR -> {
+                            return "Elder Aldric: The Dawn Seal will open Dragon's Maw. "
+                                    + "End Malachar's reign.";
+                        }
+                        case RETURN_AFTER_BOSS -> {
+                            progress.completeChapter();
+                            player.addGold(300);
+                            player.gainXp(200);
+                            player.adjustReputation(25);
+                            return "The Abyss recedes. Ashenveil's lanterns shine again. "
+                                    + "Chapter 1 complete! You earned 300 gold, 200 XP, and 25 reputation.";
+                        }
+                        case COMPLETE -> {
+                            return "Elder Aldric: The village will remember what you did for us.";
+                        }
                     }
-                    if (player.getRoadQuestStage() == 1 && player.getRoadQuestKills() < 3) {
-                        return "Elder Aldric: The road is still dangerous. Enemies defeated: "
-                                + player.getRoadQuestKills() + "/3.";
-                    }
-                    if (player.completeRoadQuest()) {
-                        player.addGold(120);
-                        player.gainXp(100);
-                        player.adjustReputation(15);
-                        return "Quest complete! The road is safe. You earned 120 gold, 100 XP, and 15 reputation.";
-                    }
-                    return "Elder Aldric: Ashenveil is safer thanks to you. Thank you, friend.";
+                }
+                if ("Sylvan Hermit".equals(nearestNpc.getName())) {
+                    return switch (player.getChapterOne().getStage()) {
+                        case CLEAR_THORNWOOD -> "Sylvan Hermit: Drive back three corrupted foes on this road.";
+                        case RETURN_TO_ELDER -> "Sylvan Hermit: The road is clear. Tell Aldric.";
+                        case FIND_CRYPT_RELIC -> "Sylvan Hermit: The Crypt entrance lies south of Ashenveil.";
+                        case DEFEAT_MALACHAR -> "Sylvan Hermit: Carry the Dawn Seal south. The Maw is open.";
+                        case RETURN_AFTER_BOSS, COMPLETE -> "Sylvan Hermit: The forest can breathe again.";
+                        case MEET_ELDER -> "Sylvan Hermit: Speak with Elder Aldric in Ashenveil first.";
+                    };
                 }
                 if (nearestNpc.getType() == NPC.NPCType.HEALER) {
                     return receiveHealerTreatment(player, player.getReputation() >= 50 ? 0 : 25);
@@ -542,6 +590,27 @@ public class GameMap {
                 return "You close the door.";
             }
             case Tile.CHEST -> {
+                if (biome == Biome.DUNGEON && nearestCol == relicCol && nearestRow == relicRow) {
+                    ChapterOneProgress progress = player.getChapterOne();
+                    if (player.hasItem("crypt_relic")) {
+                        nearestTile.openChest();
+                        objectLayer[nearestRow][nearestCol] = nearestTile.getId();
+                        return "The Dawn Seal is already in your pack. Take it to Dragon's Maw.";
+                    }
+                    if (progress.getStage() != ChapterOneProgress.Stage.FIND_CRYPT_RELIC)
+                        return "The sealed reliquary does not respond. Elder Aldric may know what it needs.";
+                    Item relic = new Material("crypt_relic", "Dawn Seal",
+                            "An ancient seal that opens the path to Dragon's Maw.",
+                            "crypt_relic", 1, 1, 0, Item.Rarity.EPIC);
+                    if (!player.canAddItem(relic) || !player.addItem(relic))
+                        return "Your pack is full. Make room before taking the Dawn Seal.";
+                    if (!progress.recoverCryptRelic())
+                        return "The Dawn Seal remains bound. Speak with Elder Aldric first.";
+                    nearestTile.openChest();
+                    objectLayer[nearestRow][nearestCol] = nearestTile.getId();
+                    assetLoader.playSfx("audio/item_pickup.mp3");
+                    return "You recovered the Dawn Seal. Carry it through Thornwood to Dragon's Maw.";
+                }
                 nearestTile.openChest();
                 objectLayer[nearestRow][nearestCol] = nearestTile.getId();
                 player.addGold(25);
@@ -653,6 +722,14 @@ public class GameMap {
         for(int r=sr;r<er;r++) for(int c=sc;c<ec;c++){
             if(objectLayer[r][c]==0) continue;
             tileCache[r][c].render(gc,tileset,c*Tile.SIZE,r*Tile.SIZE,TILES_PER_ROW);
+            if (biome == Biome.DUNGEON && c == relicCol && r == relicRow
+                    && objectLayer[r][c] == Tile.CHEST) {
+                double glow = 0.55 + 0.35 * Math.sin(System.currentTimeMillis() / 260.0);
+                gc.setFill(Color.color(1, 0.78, 0.28, glow));
+                gc.setFont(javafx.scene.text.Font.font("Serif",
+                        javafx.scene.text.FontWeight.BOLD, 15));
+                gc.fillText("✦ Dawn Seal", c * Tile.SIZE - 18, r * Tile.SIZE - 5);
+            }
         }
         for (ItemDrop drop : drops) {
             gc.setFill(drop.item instanceof Material ? Color.web("#62d8e8") : Color.web("#f0c040"));

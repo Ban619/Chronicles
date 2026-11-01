@@ -4,6 +4,7 @@ import com.abyss.entities.Player;
 import com.abyss.items.Consumable;
 import com.abyss.items.Equipment;
 import com.abyss.items.Item;
+import com.abyss.items.MerchantTransactions;
 import com.abyss.utils.InputHandler;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
@@ -43,11 +44,7 @@ public final class MerchantShopUI {
     }
 
     private String purchase(Player player, Item item, int cost) {
-        if (player.getGold() < cost) return "You need " + cost + " gold for that.";
-        if (!player.canAddItem(item)) return "Your inventory is full.";
-        if (!player.addItem(item)) return "The purchase could not be added to your inventory.";
-        player.spendGold(cost);
-        return "Purchased " + item.getDisplayName() + " for " + cost + " gold.";
+        return MerchantTransactions.purchase(player, item, cost);
     }
 
     public void render(GraphicsContext gc, double width, double height, Player player) {

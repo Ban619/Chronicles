@@ -1,6 +1,7 @@
 package com.abyss.world;
 
 import com.abyss.entities.Player;
+import com.abyss.campaign.ChapterOneProgress;
 import com.abyss.items.Item;
 import com.abyss.utils.AssetLoader;
 import javafx.scene.canvas.GraphicsContext;
@@ -102,6 +103,23 @@ public class WorldManager {
         if (fadeState == FadeState.NONE) {
             MapTransition hit = activeMap.checkTransitionTrigger(player);
             if (hit != null) {
+                if ("maps/crypt_of_echoes.json".equals(hit.getTargetMapPath())
+                        && player.getChapterOne().getStage()
+                        != ChapterOneProgress.Stage.FIND_CRYPT_RELIC) {
+                    activeMap.spawnParticle(player.getX(), player.getY() - 20,
+                            "Speak with Elder Aldric before entering the Crypt.",
+                            Color.web("#c8a96e"));
+                    hit.setCooldown(1.0);
+                    return;
+                }
+                if ("maps/dragons_maw.json".equals(hit.getTargetMapPath())
+                        && !player.getChapterOne().canEnterBossArena()) {
+                    activeMap.spawnParticle(player.getX(), player.getY() - 20,
+                            "The Dawn Seal is needed to enter Dragon's Maw.",
+                            Color.web("#c0392b"));
+                    hit.setCooldown(1.0);
+                    return;
+                }
                 // Gate check
                 if (hit.getRequiresKey() != null && !playerHasItem(player, hit.getRequiresKey())) {
                     activeMap.spawnParticle(player.getX(), player.getY() - 20,
@@ -272,10 +290,7 @@ public class WorldManager {
 
     // ── Helpers ───────────────────────────────────────────────────────────
     private boolean playerHasItem(Player player, String itemId) {
-        for (Item item : player.getInventory()) {
-            if (item != null && item.getId().equalsIgnoreCase(itemId)) return true;
-        }
-        return false;
+        return player.hasItem(itemId);
     }
 
     public boolean isTransitioning() { return fadeState != FadeState.NONE; }

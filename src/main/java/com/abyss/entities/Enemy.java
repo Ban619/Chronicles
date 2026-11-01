@@ -145,10 +145,11 @@ public class Enemy extends Entity {
         }
         if (state == AIState.ALERT) {
             moving = false;
+            float effectiveAttackRange = isBoss && bossPhase >= 3 ? 110 : attackRange;
             if (attackTelegraph) {
                 if (attackWindup <= 0) {
                     attackTelegraph = false;
-                    if (dist <= attackRange) {
+                    if (dist <= effectiveAttackRange) {
                         boolean hit = player.takeDamage(strength);
                         if (hit) map.spawnDamageNumber(player.getX() + 16, player.getY(), strength, false);
                         else map.spawnParticle(player.getX(), player.getY() - 12,
@@ -159,10 +160,14 @@ public class Enemy extends Entity {
                         map.spawnParticle(x, y - 12, "Missed!", Color.web("#d5c7a1"));
                     }
                 }
-            } else if (dist <= attackRange) {
+            } else if (dist <= effectiveAttackRange) {
                 if (attackCooldown <= 0) {
                     attackTelegraph = true;
-                    attackWindup = attackWindupDuration;
+                    attackWindup = isBoss && bossPhase == 2
+                            ? attackWindupDuration * 0.75
+                            : isBoss && bossPhase == 3
+                                    ? Math.max(0.65, attackWindupDuration)
+                                    : attackWindupDuration;
                 }
             } else {
                 attackTelegraph = false;
@@ -248,17 +253,20 @@ public class Enemy extends Entity {
             double pulse = 0.45 + 0.35 * Math.sin(System.currentTimeMillis() / 55.0);
             gc.setStroke(Color.color(1.0, 0.25, 0.16, pulse));
             gc.setLineWidth(isBoss ? 3 : 2);
-            gc.strokeOval(x - 4, y - 4, width + 8, height + 8);
+            double warningSize = isBoss && bossPhase >= 3 ? 220 : width + 8;
+            gc.strokeOval(getCenterX() - warningSize / 2, getCenterY() - warningSize / 2,
+                    warningSize, warningSize);
             gc.setFill(Color.color(1, 0.78, 0.4, pulse));
             gc.setFont(javafx.scene.text.Font.font("System", javafx.scene.text.FontWeight.BOLD, 14));
-            gc.fillText("!", x + width / 2.0 - 3, y - 16);
+            gc.fillText(isBoss && bossPhase >= 3 ? "NOVA!" : "!",
+                    x + width / 2.0 - (isBoss && bossPhase >= 3 ? 18 : 3), y - 16);
         }
 
         // HP bar above enemy
         float pct = (float) hp / maxHp;
-        double bw = isBoss ? 48 : 32;
+        double bw = isBoss ? 84 : 32;
         double bx = x + (width - bw) / 2.0;
-        double by = y - 10;
+        double by = y - (isBoss ? 15 : 10);
         gc.setFill(Color.color(0, 0, 0, 0.6));
         gc.fillRect(bx, by, bw, 5);
         gc.setFill(pct > 0.5 ? Color.web("#27ae60") : pct > 0.25 ? Color.web("#f39c12") : Color.web("#c0392b"));
@@ -268,7 +276,8 @@ public class Enemy extends Entity {
         if (isBoss) {
             gc.setFill(Color.web("#c8a96e"));
             gc.setFont(javafx.scene.text.Font.font("Serif", 9));
-            gc.fillText("★ " + name, x - 4, y - 13);
+            gc.fillText("★ " + name + " · PHASE " + bossPhase,
+                    x + width / 2.0 - 62, y - 19);
         }
 
         // Shadow

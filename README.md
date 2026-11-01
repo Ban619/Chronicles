@@ -19,7 +19,7 @@
 | **Save/Load** | Three JSON slots under `~/.chronicles_abyss/saves/`; F5/F9 quick actions |
 | **Input** | Keyboard movement and interaction, touch movement, and mouse-look in 3D mode |
 
-The first quest is a compact combat-and-return objective from Elder Aldric. Merchants sell health and mana potions and a starter weapon. Defeat returns the player to the current region's entrance with no loss of items or gold. Achievements and JSON-driven map contents are not implemented yet.
+Chapter 1 is a complete story path: meet Elder Aldric, clear three enemies in Thornwood, return for the Crypt clue, recover the Dawn Seal from the Crypt, defeat Malachar in Dragon's Maw, then return to Aldric for the ending. The active objective is shown in the HUD and saved with the player. A first-run guide explains controls and the route. Merchants sell health and mana potions and a starter weapon. Defeat returns the player to the current region's entrance with no loss of items or gold. Achievements and JSON-driven map contents are not implemented yet.
 
 ---
 
@@ -115,7 +115,7 @@ java -jar target/chronicles-of-the-abyss-1.0.0-shaded.jar
 | `F5` | Quick-save (slot 1) |
 | `F9` | Quick-load (slot 1) |
 
-Press `E` near Elder Aldric to accept or turn in the road-clearing quest. Progress is saved and counts defeated enemies while the quest is active. Press `E` near a merchant to open the shop; use `1`–`3` to buy an item. Enemy attacks have a short visual windup; wraiths attack from range, golems hit slowly and heavily, and wolves strike quickly. Evasion skills can dodge attacks. Defeat restores the player at the current region entrance without removing gold or items.
+Press `E` near Elder Aldric to accept or advance the chapter quest. Only defeated Thornwood enemies count toward the road objective. Recover the Dawn Seal from the marked reliquary in the Crypt before entering Dragon's Maw. Return to Elder Aldric after Malachar falls to finish Chapter 1. Chapter progress and the first-run guide completion are saved. Press `E` near a merchant to open the shop; use `1`–`3` to buy an item. Enemy attacks have a short visual windup; wraiths attack from range, golems hit slowly and heavily, and wolves strike quickly. Malachar announces phase changes; his final nova has a large warning radius. Evasion skills can dodge attacks. Defeat restores the player at the current region entrance without removing gold or items.
 
 Combine two movement keys for diagonal movement. In close-up perspective, the hero faces movement in eight compass directions, including northeast and southwest; mouse-look continues to rotate the camera freely. The 2D sprite sheet has four facing rows, so diagonal facing uses the nearest cardinal sprite.
 

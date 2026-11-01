@@ -27,11 +27,7 @@ public final class CombatManager {
         if (!player.isAlive()) {
             downedTimer += dt;
             if (downedTimer >= 2.5) {
-                player.heal(Math.max(1, player.getMaxHp() / 2));
-                player.restoreMp(player.getMaxMp());
-                player.stopMoving();
-                player.setX(map.getStartX());
-                player.setY(map.getStartY());
+                player.recoverAfterDefeat(map);
                 map.spawnParticle(player.getX(), player.getY() - 12,
                         "You recover. Nothing was lost.", Color.web("#c8a96e"));
                 downedTimer = 0;
@@ -63,8 +59,10 @@ public final class CombatManager {
         double criticalChance = 0.05 + player.getLuck() * 0.01
                 + player.getModifier("crit_chance");
         boolean critical = Math.random() < Math.max(0, Math.min(0.6, criticalChance));
+        int previousBossPhase = target.getBossPhase();
         int dealt = target.takeDamage(critical ? (int) Math.ceil(baseDamage * 1.6) : baseDamage);
         bossManager.checkPhaseTransition(target);
+        announceBossPhase(target, previousBossPhase, map);
         map.spawnDamageNumber(target.getX() + target.getWidth() / 2f,
                 target.getY(), dealt, critical);
         map.resolveEnemyDefeat(target, player);
@@ -104,11 +102,14 @@ public final class CombatManager {
                 double critChance = Math.max(0, Math.min(0.6,
                         0.05 + player.getLuck() * 0.01 + player.getModifier("crit_chance")));
                 boolean critical = Math.random() < critChance;
+                int previousBossPhase = target.getBossPhase();
                 int dealt = target.takeDamage(critical ? (int) Math.ceil(baseDamage * 1.6) : baseDamage,
                         move.getDefensePenetration());
                 map.spawnDamageNumber(target.getCenterX(), target.getY(), dealt, critical);
                 bossManager.checkPhaseTransition(target);
+                announceBossPhase(target, previousBossPhase, map);
             }
+
             if (move.getStatusEffect() != null) {
                 target.applyEffect(new StatusEffect(move.getStatusEffect(), 3.0));
             }
@@ -116,6 +117,16 @@ public final class CombatManager {
                     move.getName() + "!", Color.web("#62d8e8"));
             map.resolveEnemyDefeat(target, player);
         }
+    }
+
+    private void announceBossPhase(Enemy target, int previousPhase, GameMap map) {
+        if (!target.isBoss() || target.getBossPhase() <= previousPhase) return;
+        String phase = switch (target.getBossPhase()) {
+            case 2 -> "Phase II — the Abyss awakens!";
+            case 3 -> "Phase III — survive the nova!";
+            default -> "The boss changes its stance!";
+        };
+        map.spawnParticle(target.getCenterX(), target.getY() - 24, phase, Color.web("#f0c040"));
     }
 
     private Enemy findTarget(Player player, GameMap map, double maxRange) {

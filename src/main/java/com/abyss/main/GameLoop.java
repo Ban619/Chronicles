@@ -6,6 +6,8 @@ import com.abyss.lighting.LightingEngine;
 import com.abyss.ui.HUD;
 import com.abyss.ui.InventoryUI;
 import com.abyss.ui.MerchantShopUI;
+import com.abyss.ui.TutorialUI;
+import com.abyss.ui.ChapterEndingUI;
 import com.abyss.ui.SettingsMenuUI;
 import com.abyss.ui.SkillTreeUI;
 import com.abyss.utils.AssetLoader;
@@ -53,6 +55,8 @@ public class GameLoop extends AnimationTimer {
     private final SkillTreeUI     skillTreeUI;
     private final InventoryUI     inventoryUI = new InventoryUI();
     private final MerchantShopUI merchantShop = new MerchantShopUI();
+    private final TutorialUI tutorial;
+    private final ChapterEndingUI chapterEnding = new ChapterEndingUI();
     private final SettingsMenuUI  settingsUI = new SettingsMenuUI();
     private final Perspective3DEngine perspective3D;
     private final DialogueHandler dialogueHandler = new DialogueHandler();
@@ -73,6 +77,7 @@ public class GameLoop extends AnimationTimer {
         this.input       = input;
         this.world       = world;
         this.player      = player;
+        this.tutorial    = new TutorialUI(player);
         this.hud         = hud;
         this.dayNight    = dayNight;
         this.weather     = weather;
@@ -113,6 +118,18 @@ public class GameLoop extends AnimationTimer {
 
     // ─────────────────────────────────────────────────────────────────────
     private void update(double dt) {
+        if (tutorial.isVisible()) {
+            tutorial.handleInput(input);
+            player.stopMoving();
+            input.endFrame();
+            return;
+        }
+        if (chapterEnding.isOpen()) {
+            chapterEnding.handleInput(input);
+            player.stopMoving();
+            input.endFrame();
+            return;
+        }
         boolean wasTransitioning = world.isTransitioning();
         if (!skillTreeUI.isVisible() && input.isJustPressed("escape")) {
             if (settingsUI.isOpen()) {
@@ -147,7 +164,7 @@ public class GameLoop extends AnimationTimer {
         }
 
         boolean overlayOpen = inventoryUI.isOpen() || skillTreeUI.isVisible()
-                || settingsUI.isOpen() || merchantShop.isOpen();
+                || settingsUI.isOpen() || merchantShop.isOpen() || chapterEnding.isOpen();
         boolean inputBlocked = overlayOpen || world.isTransitioning();
         if (input.isJustPressed("v") && !inputBlocked) {
             settingsUI.setCloseUpPerspective(!threeDimensionalView);
@@ -193,7 +210,7 @@ public class GameLoop extends AnimationTimer {
         }
 
         boolean modalOpen = skillTreeUI.isVisible() || inventoryUI.isOpen()
-                || settingsUI.isOpen() || merchantShop.isOpen();
+                || settingsUI.isOpen() || merchantShop.isOpen() || chapterEnding.isOpen();
         // Block gameplay while a modal screen or portal transition is active.
         // Keep the whole frame blocked when the transition ends mid-update too.
         boolean uiOpen = modalOpen || wasTransitioning || world.isTransitioning();
@@ -220,7 +237,14 @@ public class GameLoop extends AnimationTimer {
             if (map.isNearMerchant(player)) {
                 merchantShop.open();
             } else {
+                var previousChapterStage = player.getChapterOne().getStage();
                 hud.showNotification(map.interact(player, dialogueHandler), Color.web("#c8a96e"));
+                if (previousChapterStage
+                        != com.abyss.campaign.ChapterOneProgress.Stage.COMPLETE
+                        && player.getChapterOne().getStage()
+                        == com.abyss.campaign.ChapterOneProgress.Stage.COMPLETE) {
+                    chapterEnding.open();
+                }
             }
         }
         if (!uiOpen) map.updateNPCs(dt, player, dayNight);
@@ -282,6 +306,8 @@ public class GameLoop extends AnimationTimer {
         settingsUI.render(gc, w, h);
         merchantShop.render(gc, w, h, player);
         world.renderPortalLoading(gc, w, h);
+        tutorial.render(gc, w, h);
+        chapterEnding.render(gc, w, h);
     }
 
     private void applyViewMode(boolean closeUpPerspective, boolean notify) {

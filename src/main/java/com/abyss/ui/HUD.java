@@ -1,6 +1,7 @@
 package com.abyss.ui;
 
 import com.abyss.entities.Player;
+import com.abyss.campaign.ChapterOneProgress;
 import com.abyss.items.Item;
 import com.abyss.world.DayNightCycle;
 import com.abyss.world.WeatherSystem;
@@ -137,7 +138,7 @@ public class HUD {
 
     // ── Info panel (top-right) ────────────────────────────────────────────
     private void renderInfoPanel(GraphicsContext gc, double w, double h) {
-        double pw = 200, ph = 76;
+        double pw = Math.min(250, Math.max(220, w * 0.5)), ph = 94;
         double px = w - pw - 10, py = 10;
 
         gc.setFill(Color.color(0.04, 0.04, 0.08, 0.82));
@@ -160,13 +161,12 @@ public class HUD {
         gc.setFill(Color.web("#555566"));
         gc.setFont(Font.font("Serif", 10));
         gc.fillText(location, px + 10, py + 50);
-        if (player.getRoadQuestStage() > 0) {
-            gc.setFill(Color.web("#f0c040"));
-            gc.setFont(Font.font("Serif", 10));
-            String questStatus = player.getRoadQuestStage() == 2 ? "Road secured"
-                    : "Road threat: " + player.getRoadQuestKills() + "/3";
-            gc.fillText(questStatus, px + 10, py + 66);
-        }
+        gc.setFill(Color.web("#f0c040"));
+        gc.setFont(Font.font("Serif", 10));
+        ChapterOneProgress progress = player.getChapterOne();
+        gc.fillText("CH. 1  " + progress.getObjective(), px + 10, py + 68);
+        if (!player.isTutorialComplete())
+            gc.fillText("Complete the welcome guide to begin.", px + 10, py + 84);
     }
 
     // ── Hotbar (bottom-centre) ────────────────────────────────────────────
