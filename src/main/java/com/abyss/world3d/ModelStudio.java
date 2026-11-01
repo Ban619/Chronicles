@@ -151,6 +151,7 @@ public final class ModelStudio {
         inspector = buildInspector();
         workspace = new javafx.scene.control.SplitPane(toolbox, viewport, inspector);
         workspace.setDividerPositions(0.21, 0.79);
+        workspace.setMinSize(0, 0);
         root.setCenter(workspace);
         root.setBottom(statusLabel);
         statusLabel.setPadding(new Insets(5, 10, 5, 10));
@@ -185,8 +186,8 @@ public final class ModelStudio {
                 event.consume();
             }
         });
-        stage.setMinWidth(1180);
-        stage.setMinHeight(720);
+        stage.setMinWidth(720);
+        stage.setMinHeight(480);
         stage.setMaximized(true);
     }
 
@@ -408,7 +409,7 @@ public final class ModelStudio {
 
         VBox pane = new VBox(createDock, assetDock);
         pane.setPrefWidth(280);
-        pane.setMinWidth(235);
+        pane.setMinWidth(0);
         pane.setStyle("-fx-background-color: #202729; -fx-border-color: #343d3e; -fx-border-width: 0 1 0 0;");
         VBox.setVgrow(assetDock, Priority.ALWAYS);
         refreshTemplates();
@@ -558,7 +559,7 @@ public final class ModelStudio {
             workspace.getItems().setAll(editorPanes);
         }
         if (inspectorOpen) {
-            inspector.setMinWidth(260);
+            inspector.setMinWidth(0);
             inspector.setPrefWidth(330);
             workspace.setDividerPositions(toolboxDividerPosition, inspectorDividerPosition);
         } else {
@@ -663,6 +664,7 @@ public final class ModelStudio {
         inspectorRevealButton.setVisible(false);
         inspectorRevealButton.setManaged(false);
         viewportPane.getChildren().addAll(preview, hint, inspectorRevealButton);
+        viewportPane.setMinSize(0, 0);
         StackPane.setAlignment(hint, Pos.BOTTOM_LEFT);
         StackPane.setMargin(hint, new Insets(12));
         StackPane.setAlignment(inspectorRevealButton, Pos.TOP_RIGHT);
@@ -699,11 +701,21 @@ public final class ModelStudio {
         GridPane transformGrid = new GridPane();
         transformGrid.setHgap(7);
         transformGrid.setVgap(5);
-        transformGrid.getColumnConstraints().addAll(new ColumnConstraints(58), new ColumnConstraints(58), new ColumnConstraints(58));
+        for (int column = 0; column < 3; column++) {
+            ColumnConstraints constraints = new ColumnConstraints();
+            constraints.setMinWidth(0);
+            constraints.setPercentWidth(100.0 / 3);
+            constraints.setHgrow(Priority.ALWAYS);
+            transformGrid.getColumnConstraints().add(constraints);
+        }
         String[] labels = {"X", "Y up", "Z", "Width", "Height", "Depth", "Rot X", "Rot Y", "Rot Z"};
         for (int i = 0; i < values.length; i++) {
             VBox field = new VBox(3, new Label(labels[i]), values[i] = new TextField());
             values[i].setPrefColumnCount(5);
+            values[i].setMinWidth(0);
+            values[i].setMaxWidth(Double.MAX_VALUE);
+            field.setMinWidth(0);
+            field.setMaxWidth(Double.MAX_VALUE);
             transformGrid.add(field, i % 3, i / 3);
         }
 
@@ -782,8 +794,10 @@ public final class ModelStudio {
         }
 
         shapePicker.setItems(FXCollections.observableArrayList("BOX", "SPHERE", "CYLINDER", "CONE", "RING"));
+        shapePicker.setMinWidth(0);
         materialPicker.setItems(FXCollections.observableArrayList(
                 java.util.Arrays.stream(SemanticMaterial.values()).map(SemanticMaterial::name).toList()));
+        materialPicker.setMinWidth(0);
         materialPicker.setOnAction(event -> applySemanticMaterial());
         finishPicker.setItems(FXCollections.observableArrayList("ROUGH", "MATTE", "SATIN", "POLISHED", "GLASS", "EMISSIVE"));
 
@@ -830,10 +844,10 @@ public final class ModelStudio {
             + "-fx-background-color: #252d2f; -fx-padding: 8 12 8 12;"
             + "-fx-border-color: #343d3e; -fx-border-width: 1 0 1 0;");
         hierarchy.setPrefHeight(255);
-        hierarchy.setMinHeight(175);
+        hierarchy.setMinHeight(0);
         VBox inspectorPane = new VBox(dockTitleBar, hierarchy, propertiesTitle, properties);
         inspectorPane.setPrefWidth(330);
-        inspectorPane.setMinWidth(260);
+        inspectorPane.setMinWidth(0);
         inspectorPane.setStyle("-fx-background-color: #202729; -fx-border-color: #343d3e; -fx-border-width: 0 0 0 1;");
         VBox.setVgrow(properties, Priority.ALWAYS);
         return inspectorPane;

@@ -122,7 +122,7 @@ Press `E` near Elder Aldric to accept or advance the chapter quest. Only defeate
 
 Combine two movement keys for diagonal movement. In close-up perspective, the hero faces movement in eight compass directions, including northeast and southwest; mouse-look continues to rotate the camera freely. The 2D sprite sheet has four facing rows, so diagonal facing uses the nearest cardinal sprite.
 
-In the Model Studio, `Ctrl+S` saves a tile model, `Ctrl+Shift+S` saves a reusable component, `Ctrl+O` opens a model, `Ctrl+D` duplicates the selected part, and `Delete` removes it when a text field is not focused. `Ctrl+Z` and `Ctrl+Y` undo and redo edits; the same commands are available in the Edit menu and Home ribbon. Studio history retains up to 100 model edits per session.
+In the Model Studio, resize the window down to 720×480 or drag the split-pane dividers to give more space to the viewport, toolbox, or inspector. The inspector transform fields adapt to narrower panes. `Ctrl+S` saves a tile model, `Ctrl+Shift+S` saves a reusable component, `Ctrl+O` opens a model, `Ctrl+D` duplicates the selected part, and `Delete` removes it when a text field is not focused. `Ctrl+Z` and `Ctrl+Y` undo and redo edits; the same commands are available in the Edit menu and Home ribbon. Studio history retains up to 100 model edits per session.
 
 ### Mobile (Touch)
 | Gesture | Action |
