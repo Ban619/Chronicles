@@ -1711,10 +1711,13 @@ public final class ModelStudio {
         showAll.setOnAction(event -> showAllComponents());
         Button selectParent = new Button("Parent");
         selectParent.setTooltip(new javafx.scene.control.Tooltip("Select the active component's parent"));
-        selectParent.setOnAction(event -> selectRelatedHierarchy(false));
+        selectParent.setOnAction(event -> selectRelatedHierarchy(HierarchySelection.PARENT));
         Button selectDescendants = new Button("Kids");
         selectDescendants.setTooltip(new javafx.scene.control.Tooltip("Select all visible descendants of the active component"));
-        selectDescendants.setOnAction(event -> selectRelatedHierarchy(true));
+        selectDescendants.setOnAction(event -> selectRelatedHierarchy(HierarchySelection.DESCENDANTS));
+        Button selectPeers = new Button("Peers");
+        selectPeers.setTooltip(new javafx.scene.control.Tooltip("Select the active component and its visible siblings"));
+        selectPeers.setOnAction(event -> selectRelatedHierarchy(HierarchySelection.SIBLINGS));
         duplicate.setText("Dup");
         moveUp.setText("Up");
         moveDown.setText("Down");
@@ -1725,7 +1728,8 @@ public final class ModelStudio {
         hierarchyActions.setMinHeight(0);
         hierarchyActions.setMaxWidth(Double.MAX_VALUE);
         Button[] hierarchyButtons = {
-                duplicate, moveUp, moveDown, hide, showAll, remove, selectParent, selectDescendants
+                duplicate, moveUp, moveDown, hide, showAll, remove,
+                selectParent, selectDescendants, selectPeers
         };
         for (int index = 0; index < hierarchyButtons.length; index++) {
             int column = index % 3;
@@ -2111,32 +2115,39 @@ public final class ModelStudio {
         statusLabel.setText("All scene objects are visible");
     }
 
-    private void selectRelatedHierarchy(boolean descendants) {
+    private void selectRelatedHierarchy(HierarchySelection selection) {
         CustomModelDefinition.Part active = selectedPart();
         if (active == null) {
             statusLabel.setText("Select a component first");
             return;
         }
 
-        List<CustomModelDefinition.Part> related;
-        if (descendants) {
-            related = parts.stream()
+        List<CustomModelDefinition.Part> related = switch (selection) {
+            case DESCENDANTS -> parts.stream()
                     .filter(part -> isDescendant(active, part))
                     .filter(this::isEffectivelyVisible)
                     .filter(part -> findTreeItem(partList.getRoot(), part) != null)
                     .toList();
-        } else {
-            CustomModelDefinition.Part parent = active.parentId == null
-                    ? null : findPart(active.parentId);
-            related = parent == null || !isEffectivelyVisible(parent)
-                    || findTreeItem(partList.getRoot(), parent) == null
-                    ? List.of() : List.of(parent);
-        }
+            case PARENT -> {
+                CustomModelDefinition.Part parent = active.parentId == null
+                        ? null : findPart(active.parentId);
+                yield parent == null || !isEffectivelyVisible(parent)
+                        || findTreeItem(partList.getRoot(), parent) == null
+                        ? List.of() : List.of(parent);
+            }
+            case SIBLINGS -> parts.stream()
+                    .filter(part -> java.util.Objects.equals(part.parentId, active.parentId))
+                    .filter(this::isEffectivelyVisible)
+                    .filter(part -> findTreeItem(partList.getRoot(), part) != null)
+                    .toList();
+        };
 
         if (related.isEmpty()) {
-            statusLabel.setText(descendants
-                    ? "No visible descendants to select"
-                    : "No visible parent to select");
+            statusLabel.setText(switch (selection) {
+                case PARENT -> "No visible parent to select";
+                case DESCENDANTS -> "No visible descendants to select";
+                case SIBLINGS -> "No visible siblings to select";
+            });
             return;
         }
 
@@ -2154,7 +2165,11 @@ public final class ModelStudio {
             selectedPartId = selected.id;
             showPart(selected);
             statusLabel.setText("Selected " + related.size()
-                    + (descendants ? " visible descendant(s)" : " parent component"));
+                    + switch (selection) {
+                        case PARENT -> " parent component";
+                        case DESCENDANTS -> " visible descendant(s)";
+                        case SIBLINGS -> " visible sibling component(s)";
+                    });
         }
         drawTransformGizmo();
     }
@@ -2497,6 +2512,8 @@ public final class ModelStudio {
     }
 
     private enum TransformOperation { MOVE, ROTATE, SCALE }
+
+    private enum HierarchySelection { PARENT, DESCENDANTS, SIBLINGS }
 
     private enum TreeDropPosition { BEFORE, CHILD, AFTER }
 
