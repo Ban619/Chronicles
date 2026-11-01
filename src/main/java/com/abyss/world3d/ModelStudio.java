@@ -809,6 +809,7 @@ public final class ModelStudio {
             values[i].setPrefColumnCount(5);
             values[i].setMinWidth(0);
             values[i].setMaxWidth(Double.MAX_VALUE);
+            values[i].setOnAction(event -> applyInspectorFields());
             field.setMinWidth(0);
             field.setMaxWidth(Double.MAX_VALUE);
             transformGrid.add(field, i % 3, i / 3);
@@ -816,18 +817,15 @@ public final class ModelStudio {
 
         Button apply = new Button("Apply part changes");
         apply.setMaxWidth(Double.MAX_VALUE);
-        apply.setOnAction(event -> performEdit(() -> {
-            applyFields();
-            refreshPreview();
-            refreshPartList(selectedPartIndex());
-        }));
+        apply.setOnAction(event -> applyInspectorFields());
 
         colorPicker.setMaxWidth(Double.MAX_VALUE);
         colorPicker.setOnAction(event -> {
             if (syncingInspector) return;
             CustomModelDefinition.Part selected = selectedPart();
-            if (selected != null) {
+            if (selected != null && validateFields()) {
                 performEdit(() -> {
+                    applyFields();
                     selected.color = colorPicker.getValue().toString();
                     refreshPreview();
                 });
@@ -847,7 +845,9 @@ public final class ModelStudio {
             if (syncingInspector) return;
             CustomModelDefinition.Part selected = selectedPart();
             if (selected != null && shapePicker.getValue() != null) {
+                if (!validateFields()) return;
                 performEdit(() -> {
+                    applyFields();
                     selected.shape = shapePicker.getValue();
                     refreshPartList(selectedPartIndex());
                     refreshPreview();
@@ -858,7 +858,9 @@ public final class ModelStudio {
             if (syncingInspector) return;
             CustomModelDefinition.Part selected = selectedPart();
             if (selected != null && finishPicker.getValue() != null) {
+                if (!validateFields()) return;
                 performEdit(() -> {
+                    applyFields();
                     selected.finish = finishPicker.getValue();
                     refreshPreview();
                 });
@@ -963,6 +965,7 @@ public final class ModelStudio {
     }
 
     private void addPart(String shape) {
+        if (!validateFields()) return;
         performEdit(() -> {
             applyFields();
             CustomModelDefinition.Part part = newPart(shape);
@@ -1000,6 +1003,7 @@ public final class ModelStudio {
         CustomModelDefinition.Part selected = selectedPart();
         int index = selectedPartIndex();
         if (selected == null || index < 0 || index >= parts.size()) return;
+        if (!validateFields()) return;
         performEdit(() -> {
             applyFields();
             CustomModelDefinition.Part copy = copyPart(selected);
@@ -1017,6 +1021,7 @@ public final class ModelStudio {
         int index = selectedPartIndex();
         int target = index + offset;
         if (index < 0 || target < 0 || target >= parts.size()) return;
+        if (!validateFields()) return;
         performEdit(() -> {
             applyFields();
             CustomModelDefinition.Part part = parts.remove(index);
@@ -1031,7 +1036,9 @@ public final class ModelStudio {
         CustomModelDefinition.Part part = selectedPart();
         String preset = materialPicker.getValue();
         if (part == null || preset == null) return;
+        if (!validateFields()) return;
         performEdit(() -> {
+            applyFields();
             SemanticMaterial semanticMaterial = SemanticMaterial.from(preset);
             part.material = semanticMaterial.name();
             if (semanticMaterial != SemanticMaterial.CUSTOM) {
@@ -1048,7 +1055,9 @@ public final class ModelStudio {
         CustomModelDefinition.Part selected = selectedPart();
         int index = selectedPartIndex();
         if (selected == null || index < 0 || index >= parts.size()) return;
+        if (!validateFields()) return;
         performEdit(() -> {
+            applyFields();
             Set<String> removedIds = new java.util.HashSet<>();
             removedIds.add(selected.id);
             boolean changed;
@@ -1092,6 +1101,7 @@ public final class ModelStudio {
     private boolean movePart(CustomModelDefinition.Part source, CustomModelDefinition.Part target,
                              TreeDropPosition position) {
         if (source == target || (target != null && isDescendant(source, target))) return false;
+        if (!validateFields()) return false;
         performEdit(() -> {
             applyFields();
             double worldX = worldPosition(source, part -> part.x);
@@ -1200,32 +1210,66 @@ public final class ModelStudio {
         values[6].setText(number(part.rotateX));
         values[7].setText(number(part.rotateY));
         values[8].setText(number(part.rotateZ));
+        for (TextField value : values) value.setStyle("");
         try { colorPicker.setValue(Color.web(part.color)); }
         catch (IllegalArgumentException ex) { colorPicker.setValue(Color.web("#8b8e83")); }
         syncingInspector = false;
     }
 
-    private void applyFields() {
+    private boolean validateFields() {
         CustomModelDefinition.Part part = selectedPart();
-        if (part == null) return;
-        part.x = parse(values[0], part.x);
-        part.y = parse(values[1], part.y);
-        part.z = parse(values[2], part.z);
-        part.width = Math.max(1, parse(values[3], part.width));
-        part.height = Math.max(1, parse(values[4], part.height));
-        part.depth = Math.max(1, parse(values[5], part.depth));
-        part.rotateX = parse(values[6], part.rotateX);
-        part.rotateY = parse(values[7], part.rotateY);
-        part.rotateZ = parse(values[8], part.rotateZ);
+        if (part == null) return true;
+        boolean valid = true;
+        for (int i = 0; i < values.length; i++) {
+            try {
+                double value = Double.parseDouble(values[i].getText().trim());
+                if (!Double.isFinite(value) || (i >= 3 && i <= 5 && value <= 0)) {
+                    throw new NumberFormatException();
+                }
+                values[i].setStyle("");
+            } catch (NumberFormatException ex) {
+                values[i].setStyle("-fx-border-color: #e26060; -fx-border-width: 1.5;");
+                valid = false;
+            }
+        }
+        if (!valid) {
+            statusLabel.setText("Enter finite numbers; width, height, and depth must be greater than zero.");
+        }
+        return valid;
+    }
+
+    private boolean applyFields() {
+        if (!validateFields()) return false;
+        CustomModelDefinition.Part part = selectedPart();
+        if (part == null) return true;
+        part.x = parse(values[0]);
+        part.y = parse(values[1]);
+        part.z = parse(values[2]);
+        part.width = parse(values[3]);
+        part.height = parse(values[4]);
+        part.depth = parse(values[5]);
+        part.rotateX = parse(values[6]);
+        part.rotateY = parse(values[7]);
+        part.rotateZ = parse(values[8]);
         if (!partName.getText().isBlank()) part.name = partName.getText().trim();
         if (shapePicker.getValue() != null) part.shape = shapePicker.getValue();
         if (materialPicker.getValue() != null) part.material = materialPicker.getValue();
         if (finishPicker.getValue() != null) part.finish = finishPicker.getValue();
         part.color = colorPicker.getValue().toString();
+        return true;
+    }
+
+    private void applyInspectorFields() {
+        if (!validateFields()) return;
+        performEdit(() -> {
+            applyFields();
+            refreshPreview();
+            refreshPartList(selectedPartIndex());
+        });
     }
 
     private void refreshPreview() {
-        applyFields();
+        if (!applyFields()) return;
         partRoot.getChildren().clear();
         Group hierarchy = CustomModelLibrary.createHierarchy(parts);
         List<Node> rootNodes = List.copyOf(hierarchy.getChildren());
@@ -1234,6 +1278,7 @@ public final class ModelStudio {
     }
 
     private void paintPickedComponent(Node pickedNode) {
+        if (!validateFields()) return;
         Node current = pickedNode;
         while (current != null && current != partRoot
                 && !(current.getUserData() instanceof CustomModelDefinition.Part)) {
@@ -1245,6 +1290,7 @@ public final class ModelStudio {
         }
 
         performEdit(() -> {
+            applyFields();
             double radius = brushRadius.getValue();
             String color = colorPicker.getValue().toString();
             SemanticMaterial semanticMaterial = SemanticMaterial.from(materialPicker.getValue());
@@ -1253,9 +1299,12 @@ public final class ModelStudio {
                     ? semanticMaterial.defaultFinish() : finishPicker.getValue();
             int painted = 0;
             for (CustomModelDefinition.Part part : parts) {
-                double dx = part.x - target.x;
-                double dy = part.y - target.y;
-                double dz = part.z - target.z;
+                double dx = worldPosition(part, candidate -> candidate.x)
+                        - worldPosition(target, candidate -> candidate.x);
+                double dy = worldPosition(part, candidate -> candidate.y)
+                        - worldPosition(target, candidate -> candidate.y);
+                double dz = worldPosition(part, candidate -> candidate.z)
+                        - worldPosition(target, candidate -> candidate.z);
                 if (part == target || dx * dx + dy * dy + dz * dz <= radius * radius) {
                     part.color = color;
                     part.material = material;
@@ -1290,7 +1339,7 @@ public final class ModelStudio {
     }
 
     private void saveModel() {
-        applyFields();
+        if (!applyFields()) return;
         definition.name = modelName.getText().isBlank() ? "Custom Model" : modelName.getText().trim();
         TileOption tile = tilePicker.getValue();
         definition.tileId = tile == null ? 0 : tile.id;
@@ -1353,7 +1402,7 @@ public final class ModelStudio {
     }
 
     private void saveComponent() {
-        applyFields();
+        if (!applyFields()) return;
         if (parts.isEmpty()) {
             error("Component is empty", "Add at least one mesh component before saving.");
             return;
@@ -1557,9 +1606,8 @@ public final class ModelStudio {
         return safe.isBlank() ? "custom_model" : safe;
     }
 
-    private double parse(TextField field, double fallback) {
-        try { return Double.parseDouble(field.getText()); }
-        catch (NumberFormatException ex) { return fallback; }
+    private double parse(TextField field) {
+        return Double.parseDouble(field.getText().trim());
     }
 
     private String number(double value) {
