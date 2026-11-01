@@ -228,6 +228,14 @@ public final class ModelStudio {
                 else frameSelected();
                 event.consume();
             } else if (!(scene.getFocusOwner() instanceof TextField)
+                    && event.isAltDown() && event.getCode() == javafx.scene.input.KeyCode.H) {
+                showAllComponents();
+                event.consume();
+            } else if (!(scene.getFocusOwner() instanceof TextField)
+                    && !event.isAltDown() && event.getCode() == javafx.scene.input.KeyCode.H) {
+                toggleSelectedVisibility();
+                event.consume();
+            } else if (!(scene.getFocusOwner() instanceof TextField)
                     && (event.getCode() == javafx.scene.input.KeyCode.G
                     || event.getCode() == javafx.scene.input.KeyCode.R
                     || event.getCode() == javafx.scene.input.KeyCode.S)) {
@@ -325,9 +333,9 @@ public final class ModelStudio {
         frameAll.setOnAction(event -> frameAll());
         MenuItem frameSelection = new MenuItem("Frame selected components (Shift+F)");
         frameSelection.setOnAction(event -> frameSelected());
-        MenuItem hideSelection = new MenuItem("Hide selected components");
+        MenuItem hideSelection = new MenuItem("Hide selected components (H)");
         hideSelection.setOnAction(event -> toggleSelectedVisibility());
-        MenuItem showHidden = new MenuItem("Show all hidden components");
+        MenuItem showHidden = new MenuItem("Show all hidden components (Alt+H)");
         showHidden.setOnAction(event -> showAllComponents());
         view.getItems().addAll(expand, showInspector, showToolbox,
                 new SeparatorMenuItem(), frameSelection, frameAll,
