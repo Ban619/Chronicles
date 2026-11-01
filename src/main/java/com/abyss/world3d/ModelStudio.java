@@ -7,6 +7,7 @@ import javafx.collections.ObservableList;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Point3D;
+import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.AmbientLight;
 import javafx.scene.Group;
@@ -37,6 +38,8 @@ import javafx.scene.control.TreeView;
 import javafx.scene.control.Slider;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.Image;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.Dragboard;
@@ -105,6 +108,7 @@ public final class ModelStudio {
     private final Label brushRadiusLabel = new Label("Brush radius: 24");
     private final Label statusLabel = new Label("Ready");
     private final Rectangle selectionMarquee = new Rectangle();
+    private final Canvas transformGizmo = new Canvas();
     private final ObservableList<CustomModelDefinition.Part> parts = FXCollections.observableArrayList();
     private final Deque<EditorSnapshot> undoHistory = new ArrayDeque<>();
     private final Deque<EditorSnapshot> redoHistory = new ArrayDeque<>();
@@ -126,12 +130,18 @@ public final class ModelStudio {
     private boolean boxSelecting;
     private boolean viewportNavigationDragging;
     private boolean panningViewport;
+    private boolean gizmoDragging;
     private boolean inspectorOpen = true;
     private boolean toolboxOpen;
     private String selectedPartId;
     private TransformOperation transformOperation;
     private String transformAxis = "X";
     private final StringBuilder transformInput = new StringBuilder();
+    private Point2D gizmoDragOrigin;
+    private Point2D gizmoDragDirection;
+    private EditorSnapshot gizmoDragSnapshot;
+    private List<TransformStart> gizmoDragStarts = List.of();
+    private double gizmoAxisPixels;
     private double inspectorDividerPosition = 0.82;
     private double explorerDividerPosition = 0.24;
     private double dragStartX;
@@ -789,12 +799,25 @@ public final class ModelStudio {
         preview.setCamera(previewCamera);
         preview.widthProperty().bind(Bindings.max(1, viewportPane.widthProperty()));
         preview.heightProperty().bind(Bindings.max(1, viewportPane.heightProperty()));
+        transformGizmo.widthProperty().bind(preview.widthProperty());
+        transformGizmo.heightProperty().bind(preview.heightProperty());
+        preview.widthProperty().addListener((obs, oldValue, newValue) -> drawTransformGizmo());
+        preview.heightProperty().addListener((obs, oldValue, newValue) -> drawTransformGizmo());
+        yaw.angleProperty().addListener((obs, oldValue, newValue) -> drawTransformGizmo());
+        pitch.angleProperty().addListener((obs, oldValue, newValue) -> drawTransformGizmo());
+        previewCamera.translateXProperty().addListener((obs, oldValue, newValue) -> drawTransformGizmo());
+        previewCamera.translateYProperty().addListener((obs, oldValue, newValue) -> drawTransformGizmo());
+        previewCamera.translateZProperty().addListener((obs, oldValue, newValue) -> drawTransformGizmo());
         preview.setOnMousePressed(event -> {
             dragX = dragStartX = event.getSceneX();
             dragY = dragStartY = event.getSceneY();
             if (event.getButton() == MouseButton.MIDDLE) {
                 viewportNavigationDragging = true;
                 panningViewport = event.isShiftDown();
+                event.consume();
+            } else if (event.getButton() == MouseButton.PRIMARY && transformOperation != null
+                    && !brushToggle.isSelected() && !boxSelectToggle.isSelected()
+                    && beginGizmoDrag(event.getX(), event.getY())) {
                 event.consume();
             } else if (event.getButton() == MouseButton.PRIMARY && boxSelectToggle.isSelected()
                     && !brushToggle.isSelected()) {
@@ -805,6 +828,11 @@ public final class ModelStudio {
             }
         });
         preview.setOnMouseDragged(event -> {
+            if (gizmoDragging) {
+                updateGizmoDrag(event.getX(), event.getY());
+                event.consume();
+                return;
+            }
             if (boxSelecting) {
                 updateSelectionMarquee(event.getX(), event.getY());
                 event.consume();
@@ -828,6 +856,11 @@ public final class ModelStudio {
             if (viewportNavigationDragging) event.consume();
         });
         preview.setOnMouseReleased(event -> {
+            if (gizmoDragging) {
+                finishGizmoDrag();
+                event.consume();
+                return;
+            }
             if (viewportNavigationDragging) {
                 viewportNavigationDragging = false;
                 panningViewport = false;
@@ -1004,7 +1037,8 @@ public final class ModelStudio {
         inspectorRevealButton.setStyle("-fx-text-fill: #e4d9bf; -fx-background-color: #202729; -fx-border-color: #6f7d74; -fx-padding: 8 12 8 12;");
         inspectorRevealButton.setVisible(false);
         inspectorRevealButton.setManaged(false);
-        viewportPane.getChildren().addAll(preview, selectionMarquee, viewportHeader, axisGizmo,
+        transformGizmo.setMouseTransparent(true);
+        viewportPane.getChildren().addAll(preview, transformGizmo, selectionMarquee, viewportHeader, axisGizmo,
                 toolShelf, toolboxOverlay, hint, inspectorRevealButton);
         viewportPane.setMinSize(0, 0);
         StackPane.setAlignment(hint, Pos.BOTTOM_LEFT);
@@ -1036,22 +1070,217 @@ public final class ModelStudio {
         return button;
     }
 
+    private void drawTransformGizmo() {
+        GraphicsContext graphics = transformGizmo.getGraphicsContext2D();
+        double width = transformGizmo.getWidth();
+        double height = transformGizmo.getHeight();
+        graphics.clearRect(0, 0, width, height);
+        if (transformOperation == null || width <= 0 || height <= 0) return;
+        CustomModelDefinition.Part active = selectedPart();
+        Node partNode = active == null ? null : findPartNode(partRoot, active.id);
+        if (partNode == null) return;
+
+        Point3D sceneOrigin = partNode.localToScene(Point3D.ZERO);
+        Point3D localOrigin = previewRoot.sceneToLocal(sceneOrigin);
+        Point2D origin = projectPreviewPoint(localOrigin);
+        if (origin == null) return;
+        double worldLength = Math.max(2, cameraDistance * 0.14);
+        drawGizmoAxis(graphics, origin, projectPreviewPoint(localOrigin.add(worldLength, 0, 0)), "X", "#ec625f");
+        drawGizmoAxis(graphics, origin, projectPreviewPoint(localOrigin.add(0, -worldLength, 0)), "Y", "#6db85d");
+        drawGizmoAxis(graphics, origin, projectPreviewPoint(localOrigin.add(0, 0, worldLength)), "Z", "#629fe0");
+        graphics.setFill(Color.web("#f5f0d7"));
+        graphics.fillOval(origin.getX() - 4, origin.getY() - 4, 8, 8);
+    }
+
+    private void drawGizmoAxis(GraphicsContext graphics, Point2D origin, Point2D endpoint,
+                               String axis, String color) {
+        if (endpoint == null) return;
+        graphics.setStroke(Color.web(color));
+        graphics.setLineWidth(axis.equals(transformAxis) ? 4 : 3);
+        graphics.strokeLine(origin.getX(), origin.getY(), endpoint.getX(), endpoint.getY());
+        double angle = Math.atan2(endpoint.getY() - origin.getY(), endpoint.getX() - origin.getX());
+        double arrowLength = 10;
+        graphics.strokeLine(endpoint.getX(), endpoint.getY(),
+                endpoint.getX() - arrowLength * Math.cos(angle - Math.PI / 6),
+                endpoint.getY() - arrowLength * Math.sin(angle - Math.PI / 6));
+        graphics.strokeLine(endpoint.getX(), endpoint.getY(),
+                endpoint.getX() - arrowLength * Math.cos(angle + Math.PI / 6),
+                endpoint.getY() - arrowLength * Math.sin(angle + Math.PI / 6));
+        graphics.setFill(Color.web(color));
+        graphics.fillOval(endpoint.getX() - 8, endpoint.getY() - 8, 16, 16);
+        graphics.setFill(Color.WHITE);
+        graphics.fillText(axis, endpoint.getX() - 3, endpoint.getY() + 4);
+    }
+
+    private Point2D projectPreviewPoint(Point3D point) {
+        Point3D cameraPoint = previewCamera.sceneToLocal(previewRoot.localToScene(point));
+        if (cameraPoint.getZ() <= previewCamera.getNearClip()) return null;
+        double verticalFov = previewCamera.isVerticalFieldOfView()
+                ? previewCamera.getFieldOfView()
+                : Math.toDegrees(2 * Math.atan(Math.tan(
+                        Math.toRadians(previewCamera.getFieldOfView()) / 2)
+                        * preview.getHeight() / Math.max(1, preview.getWidth())));
+        double focalLength = preview.getHeight() / (2 * Math.tan(Math.toRadians(verticalFov) / 2));
+        return new Point2D(preview.getWidth() / 2 + cameraPoint.getX() * focalLength / cameraPoint.getZ(),
+                preview.getHeight() / 2 + cameraPoint.getY() * focalLength / cameraPoint.getZ());
+    }
+
+    private boolean beginGizmoDrag(double x, double y) {
+        CustomModelDefinition.Part active = selectedPart();
+        Node partNode = active == null ? null : findPartNode(partRoot, active.id);
+        if (partNode == null) return false;
+        Point3D sceneOrigin = partNode.localToScene(Point3D.ZERO);
+        Point3D localOrigin = previewRoot.sceneToLocal(sceneOrigin);
+        Point2D origin = projectPreviewPoint(localOrigin);
+        if (origin == null) return false;
+        double worldLength = Math.max(2, cameraDistance * 0.14);
+        Point2D[] endpoints = {
+                projectPreviewPoint(localOrigin.add(worldLength, 0, 0)),
+                projectPreviewPoint(localOrigin.add(0, -worldLength, 0)),
+                projectPreviewPoint(localOrigin.add(0, 0, worldLength))
+        };
+        String[] axes = {"X", "Y", "Z"};
+        double closestDistance = 13;
+        int selectedAxis = -1;
+        for (int i = 0; i < endpoints.length; i++) {
+            Point2D endpoint = endpoints[i];
+            if (endpoint == null) continue;
+            double distance = endpoint.distance(x, y);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                selectedAxis = i;
+            }
+        }
+        if (selectedAxis < 0) return false;
+        List<CustomModelDefinition.Part> roots = selectedRoots();
+        if (roots.isEmpty()) return false;
+        if (!validateFields()) return false;
+        applyFields();
+        transformAxis = axes[selectedAxis];
+        transformInput.setLength(0);
+        gizmoDragOrigin = new Point2D(x, y);
+        Point2D delta = endpoints[selectedAxis].subtract(origin);
+        gizmoAxisPixels = delta.magnitude();
+        if (gizmoAxisPixels < 1) return false;
+        gizmoDragDirection = delta.normalize();
+        gizmoDragSnapshot = snapshot();
+        gizmoDragStarts = roots.stream().map(TransformStart::from).toList();
+        gizmoDragging = true;
+        updateTransformToolStyles();
+        drawTransformGizmo();
+        return true;
+    }
+
+    private List<CustomModelDefinition.Part> selectedRoots() {
+        List<CustomModelDefinition.Part> selected = selectedParts();
+        return selected.stream()
+                .filter(part -> selected.stream().noneMatch(candidate ->
+                        candidate != part && isDescendant(candidate, part)))
+                .toList();
+    }
+
+    private void updateGizmoDrag(double x, double y) {
+        if (gizmoDragOrigin == null || gizmoDragDirection == null) return;
+        Point2D mouseDelta = new Point2D(x, y).subtract(gizmoDragOrigin);
+        double projectedDelta = mouseDelta.dotProduct(gizmoDragDirection);
+        double amount;
+        if (transformOperation == TransformOperation.MOVE) {
+            double worldLength = Math.max(2, cameraDistance * 0.14);
+            amount = projectedDelta * worldLength / gizmoAxisPixels;
+        } else if (transformOperation == TransformOperation.ROTATE) {
+            amount = projectedDelta * 0.8;
+        } else {
+            amount = Math.exp(projectedDelta / 100);
+        }
+        for (TransformStart start : gizmoDragStarts) {
+            CustomModelDefinition.Part part = findPart(start.id);
+            if (part == null) continue;
+            start.restore(part);
+            if (!isValidTransformResult(part, transformOperation, transformAxis, amount)) continue;
+            switch (transformOperation) {
+                case MOVE -> setPartPosition(part, transformAxis, start, amount);
+                case ROTATE -> setPartRotation(part, transformAxis, start, amount);
+                case SCALE -> setPartScale(part, transformAxis, start, amount);
+            }
+        }
+        rebuildPreview();
+        CustomModelDefinition.Part active = selectedPart();
+        if (active != null) showPart(active);
+    }
+
+    private void setPartPosition(CustomModelDefinition.Part part, String axis,
+                                 TransformStart start, double amount) {
+        if (axis.equals("X")) part.x = start.x + amount;
+        else if (axis.equals("Y")) part.y = start.y + amount;
+        else part.z = start.z + amount;
+    }
+
+    private void setPartRotation(CustomModelDefinition.Part part, String axis,
+                                 TransformStart start, double amount) {
+        if (axis.equals("X")) part.rotateX = start.rotateX + amount;
+        else if (axis.equals("Y")) part.rotateY = start.rotateY + amount;
+        else part.rotateZ = start.rotateZ + amount;
+    }
+
+    private void setPartScale(CustomModelDefinition.Part part, String axis,
+                              TransformStart start, double amount) {
+        if (axis.equals("X")) part.width = start.width * amount;
+        else if (axis.equals("Y")) part.height = start.height * amount;
+        else part.depth = start.depth * amount;
+    }
+
+    private void finishGizmoDrag() {
+        gizmoDragging = false;
+        if (gizmoDragSnapshot != null && !sameModel(gizmoDragSnapshot, snapshot())) {
+            undoHistory.push(gizmoDragSnapshot);
+            if (undoHistory.size() > MAX_HISTORY) undoHistory.removeLast();
+            redoHistory.clear();
+            updateHistoryActions();
+        }
+        gizmoDragSnapshot = null;
+        gizmoDragStarts = List.of();
+        gizmoDragOrigin = null;
+        gizmoDragDirection = null;
+        transformOperation = null;
+        updateTransformToolStyles();
+        drawTransformGizmo();
+        statusLabel.setText("Viewport transform applied");
+    }
+
+    private void cancelGizmoDrag() {
+        gizmoDragging = false;
+        if (gizmoDragSnapshot != null) {
+            parts.clear();
+            gizmoDragSnapshot.parts.stream().map(this::copyPart).forEach(parts::add);
+            refreshPartList(gizmoDragSnapshot.selectedIndex);
+            refreshPreview();
+        }
+        gizmoDragSnapshot = null;
+        gizmoDragStarts = List.of();
+        gizmoDragOrigin = null;
+        gizmoDragDirection = null;
+    }
+
     private void beginTransform(TransformOperation operation) {
         if (selectedParts().isEmpty()) {
             statusLabel.setText("Select one or more scene objects before transforming");
             return;
         }
         if (!validateFields()) return;
+        boxSelectToggle.setSelected(false);
+        brushToggle.setSelected(false);
         transformOperation = operation;
         transformAxis = "X";
         transformInput.setLength(0);
         updateTransformToolStyles();
+        drawTransformGizmo();
         updateTransformStatus();
     }
 
     private boolean handleTransformKey(javafx.scene.input.KeyEvent event) {
         javafx.scene.input.KeyCode code = event.getCode();
         if (code == javafx.scene.input.KeyCode.ESCAPE) {
+            if (gizmoDragging) cancelGizmoDrag();
             transformOperation = null;
             updateTransformToolStyles();
             statusLabel.setText("Transform cancelled");
@@ -1100,7 +1329,7 @@ public final class ModelStudio {
         String units = transformOperation == TransformOperation.ROTATE ? "°" : "";
         statusLabel.setText(action + " · axis " + transformAxis + " · value "
                 + (transformInput.isEmpty() ? "—" : transformInput) + units
-                + " · type value, Enter to apply, Esc to cancel");
+                + " · drag an axis handle or type a value, Enter to apply, Esc to cancel");
     }
 
     private void applyViewportTransform() {
@@ -1162,7 +1391,7 @@ public final class ModelStudio {
                     }
                 }
             }
-            refreshPreview();
+            rebuildPreview();
             CustomModelDefinition.Part active = selectedPart();
             if (active != null) showPart(active);
         });
@@ -1303,6 +1532,7 @@ public final class ModelStudio {
             if (!rebuildingPartTree && selected != null) {
                 selectedPartId = selected.getValue().id;
                 showPart(selected.getValue());
+                drawTransformGizmo();
             }
         });
         hierarchySearch.setPromptText("Search scene objects");
@@ -1885,6 +2115,28 @@ public final class ModelStudio {
 
     private enum TreeDropPosition { BEFORE, CHILD, AFTER }
 
+    private record TransformStart(String id, double x, double y, double z,
+                                 double width, double height, double depth,
+                                 double rotateX, double rotateY, double rotateZ) {
+        private static TransformStart from(CustomModelDefinition.Part part) {
+            return new TransformStart(part.id, part.x, part.y, part.z,
+                    part.width, part.height, part.depth,
+                    part.rotateX, part.rotateY, part.rotateZ);
+        }
+
+        private void restore(CustomModelDefinition.Part part) {
+            part.x = x;
+            part.y = y;
+            part.z = z;
+            part.width = width;
+            part.height = height;
+            part.depth = depth;
+            part.rotateX = rotateX;
+            part.rotateY = rotateY;
+            part.rotateZ = rotateZ;
+        }
+    }
+
     private void refreshPartList(int selectedIndex) {
         if (parts.isEmpty()) {
             rebuildingPartTree = true;
@@ -2011,11 +2263,16 @@ public final class ModelStudio {
 
     private void refreshPreview() {
         if (!applyFields()) return;
+        rebuildPreview();
+    }
+
+    private void rebuildPreview() {
         partRoot.getChildren().clear();
         Group hierarchy = CustomModelLibrary.createHierarchy(parts);
         List<Node> rootNodes = List.copyOf(hierarchy.getChildren());
         hierarchy.getChildren().clear();
         partRoot.getChildren().setAll(rootNodes);
+        drawTransformGizmo();
     }
 
     private void paintPickedComponent(Node pickedNode) {
