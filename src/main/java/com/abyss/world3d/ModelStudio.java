@@ -1056,7 +1056,7 @@ public final class ModelStudio {
         Button remove = new Button("Remove");
         remove.setOnAction(event -> removeSelectedPart());
         Button duplicate = new Button("Duplicate");
-        duplicate.setTooltip(new javafx.scene.control.Tooltip("Duplicate selected scene object"));
+        duplicate.setTooltip(new javafx.scene.control.Tooltip("Duplicate selected scene objects and their child hierarchy"));
         duplicate.setOnAction(event -> duplicateSelectedPart());
         Button moveUp = new Button("Move up");
         moveUp.setTooltip(new javafx.scene.control.Tooltip("Move selected object up in draw order"));
@@ -1299,20 +1299,44 @@ public final class ModelStudio {
     }
 
     private void duplicateSelectedPart() {
-        CustomModelDefinition.Part selected = selectedPart();
-        int index = selectedPartIndex();
-        if (selected == null || index < 0 || index >= parts.size()) return;
+        List<CustomModelDefinition.Part> selected = selectedParts();
+        if (selected.isEmpty()) return;
         if (!validateFields()) return;
         performEdit(() -> {
             applyFields();
-            CustomModelDefinition.Part copy = copyPart(selected);
-            copy.id = UUID.randomUUID().toString();
-            copy.name = selected.name + " Copy";
-            copy.x += 4;
-            copy.z += 4;
-            parts.add(index + 1, copy);
-            refreshPartList(index + 1);
+            List<CustomModelDefinition.Part> roots = selected.stream()
+                    .filter(part -> selected.stream().noneMatch(candidate ->
+                            candidate != part && isDescendant(candidate, part)))
+                    .toList();
+            Set<String> rootIds = roots.stream().map(part -> part.id)
+                    .collect(java.util.stream.Collectors.toSet());
+            List<CustomModelDefinition.Part> sourceParts = parts.stream()
+                    .filter(part -> roots.stream().anyMatch(root ->
+                            part == root || isDescendant(root, part)))
+                    .toList();
+            java.util.Map<String, CustomModelDefinition.Part> copiesById = new java.util.HashMap<>();
+            List<CustomModelDefinition.Part> copies = new ArrayList<>();
+            for (CustomModelDefinition.Part source : sourceParts) {
+                CustomModelDefinition.Part copy = copyPart(source);
+                copy.id = UUID.randomUUID().toString();
+                copy.name = source.name + " Copy";
+                if (rootIds.contains(source.id)) {
+                    copy.x += 4;
+                    copy.z += 4;
+                }
+                copiesById.put(source.id, copy);
+                copies.add(copy);
+            }
+            for (int i = 0; i < sourceParts.size(); i++) {
+                CustomModelDefinition.Part source = sourceParts.get(i);
+                CustomModelDefinition.Part copy = copies.get(i);
+                CustomModelDefinition.Part copiedParent = copiesById.get(source.parentId);
+                if (copiedParent != null) copy.parentId = copiedParent.id;
+            }
+            parts.addAll(copies);
+            refreshPartList(parts.size() - 1);
             refreshPreview();
+            statusLabel.setText(copies.size() + " component(s) duplicated");
         });
     }
 
@@ -1351,14 +1375,15 @@ public final class ModelStudio {
     }
 
     private void removeSelectedPart() {
-        CustomModelDefinition.Part selected = selectedPart();
-        int index = selectedPartIndex();
-        if (selected == null || index < 0 || index >= parts.size()) return;
+        List<CustomModelDefinition.Part> selected = selectedParts();
+        if (selected.isEmpty()) return;
+        int index = selected.stream().mapToInt(parts::indexOf).min().orElse(-1);
+        if (index < 0) return;
         if (!validateFields()) return;
         performEdit(() -> {
             applyFields();
             Set<String> removedIds = new java.util.HashSet<>();
-            removedIds.add(selected.id);
+            selected.forEach(part -> removedIds.add(part.id));
             boolean changed;
             do {
                 changed = false;
@@ -1369,7 +1394,19 @@ public final class ModelStudio {
             parts.removeIf(part -> removedIds.contains(part.id));
             refreshPartList(Math.min(index, parts.size() - 1));
             refreshPreview();
+            statusLabel.setText(removedIds.size() + " component(s) removed");
         });
+    }
+
+    private List<CustomModelDefinition.Part> selectedParts() {
+        Set<CustomModelDefinition.Part> selected = partList.getSelectionModel().getSelectedItems().stream()
+                .map(TreeItem::getValue)
+                .collect(java.util.stream.Collectors.toSet());
+        if (selected.isEmpty()) {
+            CustomModelDefinition.Part single = selectedPart();
+            if (single != null) selected.add(single);
+        }
+        return parts.stream().filter(selected::contains).toList();
     }
 
     private CustomModelDefinition.Part selectedPart() {
