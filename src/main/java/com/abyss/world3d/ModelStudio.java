@@ -219,6 +219,11 @@ public final class ModelStudio {
                     && !(scene.getFocusOwner() instanceof javafx.scene.control.TextInputControl)) {
                 invertVisibleSelection();
                 event.consume();
+            } else if (event.isAltDown() && !event.isControlDown()
+                    && event.getCode() == javafx.scene.input.KeyCode.A
+                    && !(scene.getFocusOwner() instanceof javafx.scene.control.TextInputControl)) {
+                clearStudioSelection();
+                event.consume();
             } else if (event.isControlDown() && event.getCode() == javafx.scene.input.KeyCode.S) {
                 if (event.isShiftDown()) saveComponent();
                 else saveModel();
@@ -1067,7 +1072,7 @@ public final class ModelStudio {
             event.consume();
         });
 
-        Label hint = new Label("Ctrl+A selects · Ctrl+I inverts visible Outliner rows · Shift-click/box-drag adds · Middle-drag orbits · Shift+middle-drag pans");
+        Label hint = new Label("Ctrl+A select · Ctrl+I invert · Alt+A clear · Shift-click/box-drag add · MMB orbit · Shift+MMB pan");
         hint.setStyle("-fx-text-fill: #a7b0a8; -fx-background-color: #171e20cc; -fx-padding: 8 12 8 12;");
         inspectorRevealButton.setOnAction(event -> revealInspector());
         inspectorRevealButton.setStyle("-fx-text-fill: #e4d9bf; -fx-background-color: #202729; -fx-border-color: #6f7d74; -fx-padding: 8 12 8 12;");
@@ -2218,7 +2223,7 @@ public final class ModelStudio {
         List<TreeItem<CustomModelDefinition.Part>> selectedItems =
                 partList.getSelectionModel().getSelectedItems();
         if (selectedItems.isEmpty()) {
-            selectedPartId = null;
+            clearStudioSelection();
             statusLabel.setText(candidates.isEmpty()
                     ? "No visible Outliner objects to invert"
                     : "Selection inverted; no components selected");
@@ -2236,6 +2241,14 @@ public final class ModelStudio {
                     + " visible Outliner component(s); " + selectedItems.size() + " selected");
         }
         drawTransformGizmo();
+    }
+
+    private void clearStudioSelection() {
+        partList.getSelectionModel().clearSelection();
+        selectedPartId = null;
+        showPart(null);
+        drawTransformGizmo();
+        statusLabel.setText("Selection cleared");
     }
 
     private void selectPartFromNode(Node pickedNode, boolean additive) {
@@ -2266,7 +2279,7 @@ public final class ModelStudio {
                     showPart(active);
                     statusLabel.setText("Selected " + selectedItems.size() + " component(s)");
                 } else {
-                    selectedPartId = null;
+                    clearStudioSelection();
                     statusLabel.setText("Selection cleared");
                 }
                 drawTransformGizmo();
@@ -2274,9 +2287,7 @@ public final class ModelStudio {
             }
         }
         if (additive) return;
-        partList.getSelectionModel().clearSelection();
-        selectedPartId = null;
-        drawTransformGizmo();
+        clearStudioSelection();
         statusLabel.setText("No scene object at that position");
     }
 
