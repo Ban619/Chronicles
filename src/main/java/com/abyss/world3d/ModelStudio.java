@@ -87,6 +87,7 @@ public final class ModelStudio {
     private final TreeView<CustomModelDefinition.Part> partList = new TreeView<>();
     private final ListView<TemplateEntry> templateList = new ListView<>();
     private final TextField modelName = new TextField("Custom Model");
+    private final TextField hierarchySearch = new TextField();
     private final TextField[] values = new TextField[9];
     private final TextField partName = new TextField();
     private final javafx.scene.control.ColorPicker colorPicker = new javafx.scene.control.ColorPicker(Color.web("#8b8e83"));
@@ -125,6 +126,7 @@ public final class ModelStudio {
     private boolean boxSelecting;
     private boolean inspectorOpen = true;
     private boolean toolboxOpen;
+    private String selectedPartId;
     private double inspectorDividerPosition = 0.82;
     private double explorerDividerPosition = 0.24;
     private double dragStartX;
@@ -325,16 +327,38 @@ public final class ModelStudio {
         modelName.setPrefColumnCount(13);
         ToggleGroup tabs = new ToggleGroup();
         HBox tabRow = new HBox(2);
-        for (String tab : List.of("Layout", "Modeling", "Materials", "Assets")) {
+        Set<String> supportedWorkspaces = Set.of("Layout", "Modeling", "Shading", "Assets");
+        for (String tab : List.of("Layout", "Modeling", "Sculpting", "UV Editing",
+                "Texture Paint", "Shading", "Animation", "Rendering", "Compositing",
+                "Geometry Nodes", "Assets")) {
             javafx.scene.control.ToggleButton button = new javafx.scene.control.ToggleButton(tab);
-            button.setToggleGroup(tabs);
-            button.setOnAction(event -> showRibbon(tab));
+            if (supportedWorkspaces.contains(tab)) {
+                button.setToggleGroup(tabs);
+                button.setOnAction(event -> showRibbon(tab.equals("Shading") ? "Materials" : tab));
+            } else {
+                button.setDisable(true);
+                button.setTooltip(new javafx.scene.control.Tooltip(
+                        tab + " workspace is not available in this editor yet."));
+            }
             button.setStyle(workspaceTabStyle(false));
             button.selectedProperty().addListener((obs, wasSelected, isSelected) ->
                     button.setStyle(workspaceTabStyle(isSelected)));
+            button.setStyle(button.isDisabled()
+                    ? "-fx-background-color: transparent; -fx-text-fill: #697270; -fx-opacity: 0.65;"
+                    : workspaceTabStyle(false));
             tabRow.getChildren().add(button);
             if (tab.equals("Layout")) button.setSelected(true);
         }
+        ScrollPane workspaceScroller = new ScrollPane(tabRow);
+        workspaceScroller.setFitToHeight(true);
+        workspaceScroller.setFitToWidth(false);
+        workspaceScroller.setPannable(true);
+        workspaceScroller.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        workspaceScroller.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        workspaceScroller.setPrefViewportHeight(34);
+        workspaceScroller.setMinWidth(0);
+        workspaceScroller.setStyle("-fx-background: transparent; -fx-background-color: transparent;"
+                + "-fx-padding: 0; -fx-border-color: transparent;");
         ribbonCommands = new HBox(8);
         ribbonCommands.setAlignment(Pos.CENTER_LEFT);
         showRibbon(activeRibbon);
@@ -342,9 +366,10 @@ public final class ModelStudio {
         inspectorOpenButton.setTooltip(new javafx.scene.control.Tooltip("Open the Component Inspector dock"));
         inspectorOpenButton.setOnAction(event -> setInspectorOpen(true));
         viewportModeButton.setOnAction(event -> toggleViewportOnly(viewportModeButton));
-        HBox identity = new HBox(10, title, modelName, tabRow);
+        HBox identity = new HBox(10, title, modelName, workspaceScroller);
         identity.setAlignment(Pos.CENTER_LEFT);
         identity.setPadding(new Insets(4, 10, 4, 10));
+        HBox.setHgrow(workspaceScroller, Priority.ALWAYS);
         HBox context = new HBox(8, inspectorOpenButton, viewportModeButton);
         context.setAlignment(Pos.CENTER_RIGHT);
         HBox.setHgrow(ribbonCommands, Priority.ALWAYS);
@@ -1050,8 +1075,16 @@ public final class ModelStudio {
             }
         });
         partList.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> {
-            if (!rebuildingPartTree && selected != null) showPart(selected.getValue());
+            if (!rebuildingPartTree && selected != null) {
+                selectedPartId = selected.getValue().id;
+                showPart(selected.getValue());
+            }
         });
+        hierarchySearch.setPromptText("Search scene objects");
+        hierarchySearch.setStyle("-fx-background-color: #171e20; -fx-text-fill: #e4e9e5;"
+                + "-fx-prompt-text-fill: #87918d; -fx-border-color: #3b4648;");
+        hierarchySearch.textProperty().addListener((obs, oldValue, newValue) ->
+                refreshPartList(selectedPartIndex()));
 
         Button remove = new Button("Remove");
         remove.setOnAction(event -> removeSelectedPart());
@@ -1206,7 +1239,7 @@ public final class ModelStudio {
         partsLabel.setStyle("-fx-text-fill: #d7dfd9; -fx-font-weight: bold;");
         Label transformLabel = new Label("SELECTED COMPONENT");
         Label surfaceLabel = new Label("SURFACE MATERIAL");
-        VBox hierarchy = new VBox(8, partsLabel, hierarchyActions, partList);
+        VBox hierarchy = new VBox(8, partsLabel, hierarchySearch, hierarchyActions, partList);
         hierarchy.setPadding(new Insets(12));
         hierarchy.setMinSize(0, 190);
         hierarchy.setStyle("-fx-background-color: #202729; -fx-border-color: #343d3e; -fx-border-width: 0 0 1 0;");
@@ -1631,30 +1664,48 @@ public final class ModelStudio {
             partList.setRoot(new TreeItem<>());
             partList.getSelectionModel().clearSelection();
             rebuildingPartTree = false;
+            selectedPartId = null;
             return;
         }
-        int safeIndex = Math.max(0, Math.min(selectedIndex, parts.size() - 1));
-        String selectedId = parts.get(safeIndex).id;
+        String selectedId = selectedIndex >= 0 && selectedIndex < parts.size()
+                ? parts.get(selectedIndex).id : selectedPartId;
+        if (selectedId != null && findPart(selectedId) == null) selectedId = null;
         rebuildingPartTree = true;
         TreeItem<CustomModelDefinition.Part> rootItem = new TreeItem<>();
         rootItem.setExpanded(true);
         java.util.Map<String, TreeItem<CustomModelDefinition.Part>> items = new java.util.LinkedHashMap<>();
+        String query = hierarchySearch.getText() == null
+                ? "" : hierarchySearch.getText().trim().toLowerCase(java.util.Locale.ROOT);
         for (CustomModelDefinition.Part part : parts) {
-            items.put(part.id, new TreeItem<>(part));
+            if (query.isEmpty() || matchesPartOrDescendant(part, query)) {
+                items.put(part.id, new TreeItem<>(part));
+            }
         }
         for (CustomModelDefinition.Part part : parts) {
             TreeItem<CustomModelDefinition.Part> item = items.get(part.id);
+            if (item == null) continue;
             TreeItem<CustomModelDefinition.Part> parent = items.get(part.parentId);
             (parent == null ? rootItem : parent).getChildren().add(item);
         }
         expandTree(rootItem);
+        partList.getSelectionModel().clearSelection();
         partList.setRoot(rootItem);
         TreeItem<CustomModelDefinition.Part> selected = items.get(selectedId);
         if (selected != null) {
             partList.getSelectionModel().select(selected);
             showPart(selected.getValue());
+            selectedPartId = selected.getValue().id;
         }
         rebuildingPartTree = false;
+    }
+
+    private boolean matchesPartOrDescendant(CustomModelDefinition.Part part, String query) {
+        if (part.name != null && part.name.toLowerCase(java.util.Locale.ROOT).contains(query)) return true;
+        if (part.shape != null && part.shape.toLowerCase(java.util.Locale.ROOT).contains(query)) return true;
+        for (CustomModelDefinition.Part candidate : parts) {
+            if (part.id.equals(candidate.parentId) && matchesPartOrDescendant(candidate, query)) return true;
+        }
+        return false;
     }
 
     private void showPart(CustomModelDefinition.Part part) {
