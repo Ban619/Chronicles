@@ -900,7 +900,7 @@ public final class ModelStudio {
             if (Math.hypot(event.getSceneX() - dragStartX, event.getSceneY() - dragStartY) > 4) return;
             Node pickedNode = event.getPickResult().getIntersectedNode();
             if (brushToggle.isSelected()) paintPickedComponent(pickedNode);
-            else selectPartFromNode(pickedNode);
+            else selectPartFromNode(pickedNode, event.isShiftDown());
         });
         preview.setOnScroll(event -> {
             cameraDistance = Math.max(10, Math.min(2500, cameraDistance - event.getDeltaY() * 0.35));
@@ -913,7 +913,8 @@ public final class ModelStudio {
         selectionMarquee.setManaged(false);
         selectionMarquee.setVisible(false);
         Button selectTool = new Button("Select");
-        selectTool.setTooltip(new javafx.scene.control.Tooltip("Select one scene object by clicking it."));
+        selectTool.setTooltip(new javafx.scene.control.Tooltip(
+                "Click to select one scene object; Shift-click to add or toggle it in the selection."));
         selectTool.setMaxWidth(Double.MAX_VALUE);
         selectTool.setOnAction(event -> {
             boxSelectToggle.setSelected(false);
@@ -1053,7 +1054,7 @@ public final class ModelStudio {
             event.consume();
         });
 
-        Label hint = new Label("Middle-drag to orbit · Shift+middle-drag to pan · Scroll to zoom");
+        Label hint = new Label("Shift-click to add/toggle selection · Middle-drag to orbit · Shift+middle-drag to pan");
         hint.setStyle("-fx-text-fill: #a7b0a8; -fx-background-color: #171e20cc; -fx-padding: 8 12 8 12;");
         inspectorRevealButton.setOnAction(event -> revealInspector());
         inspectorRevealButton.setStyle("-fx-text-fill: #e4d9bf; -fx-background-color: #202729; -fx-border-color: #6f7d74; -fx-padding: 8 12 8 12;");
@@ -2144,7 +2145,7 @@ public final class ModelStudio {
         }
     }
 
-    private void selectPartFromNode(Node pickedNode) {
+    private void selectPartFromNode(Node pickedNode, boolean additive) {
         Node current = pickedNode;
         while (current != null && current != partRoot
                 && !(current.getUserData() instanceof CustomModelDefinition.Part)) {
@@ -2153,13 +2154,36 @@ public final class ModelStudio {
         if (current != null && current.getUserData() instanceof CustomModelDefinition.Part part) {
             TreeItem<CustomModelDefinition.Part> item = findTreeItem(partList.getRoot(), part);
             if (item != null) {
-                partList.getSelectionModel().clearSelection();
-                partList.getSelectionModel().select(item);
-                statusLabel.setText("Selected " + part.name);
+                if (!additive) {
+                    partList.getSelectionModel().clearSelection();
+                    partList.getSelectionModel().select(item);
+                } else if (partList.getSelectionModel().getSelectedItems().contains(item)) {
+                    partList.getSelectionModel().clearSelection(partList.getRow(item));
+                } else {
+                    partList.getSelectionModel().select(item);
+                }
+                List<TreeItem<CustomModelDefinition.Part>> selectedItems =
+                        partList.getSelectionModel().getSelectedItems();
+                if (!selectedItems.isEmpty()) {
+                    TreeItem<CustomModelDefinition.Part> activeItem =
+                            partList.getSelectionModel().getSelectedItem();
+                    if (activeItem == null) activeItem = selectedItems.get(selectedItems.size() - 1);
+                    CustomModelDefinition.Part active = activeItem.getValue();
+                    selectedPartId = active.id;
+                    showPart(active);
+                    statusLabel.setText("Selected " + selectedItems.size() + " component(s)");
+                } else {
+                    selectedPartId = null;
+                    statusLabel.setText("Selection cleared");
+                }
+                drawTransformGizmo();
                 return;
             }
         }
+        if (additive) return;
         partList.getSelectionModel().clearSelection();
+        selectedPartId = null;
+        drawTransformGizmo();
         statusLabel.setText("No scene object at that position");
     }
 
