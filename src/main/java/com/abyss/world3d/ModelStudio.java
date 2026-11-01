@@ -26,11 +26,15 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TreeCell;
+import javafx.scene.control.TreeItem;
+import javafx.scene.control.TreeView;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Slider;
 import javafx.scene.image.Image;
 import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.Dragboard;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
@@ -57,6 +61,8 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 /** JavaFX primitive-model editor for creating props used by the 3D map renderer. */
 public final class ModelStudio {
@@ -70,7 +76,7 @@ public final class ModelStudio {
     private final BorderPane root = new BorderPane();
     private final Group previewRoot = new Group();
     private final Group partRoot = new Group();
-    private final ListView<CustomModelDefinition.Part> partList = new ListView<>();
+    private final TreeView<CustomModelDefinition.Part> partList = new TreeView<>();
     private final ListView<TemplateEntry> templateList = new ListView<>();
     private final TextField modelName = new TextField("Custom Model");
     private final TextField[] values = new TextField[9];
@@ -101,6 +107,7 @@ public final class ModelStudio {
     private int nextPartNumber = 1;
     private boolean syncingInspector;
     private boolean restoringHistory;
+    private boolean rebuildingPartTree;
     private boolean viewportOnly;
     private boolean inspectorOpen = true;
     private double toolboxDividerPosition = 0.17;
@@ -675,9 +682,10 @@ public final class ModelStudio {
     }
 
     private VBox buildInspector() {
-        partList.setItems(parts);
-        partList.setPrefWidth(230);
         partList.setMinHeight(70);
+        partList.setShowRoot(false);
+        partList.setTooltip(new javafx.scene.control.Tooltip(
+                "Drag near a row edge to reorder; drop in the middle to nest. Nested transforms are relative to the parent."));
         partList.setStyle("-fx-control-inner-background: #171e20;"
                 + "-fx-background-color: #171e20;"
                 + "-fx-text-fill: #e4e9e5;"
@@ -685,9 +693,43 @@ public final class ModelStudio {
                 + "-fx-selection-bar-non-focused: #36545d;"
                 + "-fx-focus-color: #168eb5;"
                 + "-fx-faint-focus-color: transparent;");
-        partList.setCellFactory(list -> new ListCell<>() {
+        partList.setCellFactory(tree -> new TreeCell<>() {
             {
+                setOnDragDetected(event -> {
+                    CustomModelDefinition.Part part = getItem();
+                    if (part == null) return;
+                    Dragboard dragboard = startDragAndDrop(TransferMode.MOVE);
+                    ClipboardContent content = new ClipboardContent();
+                    content.putString(part.id);
+                    dragboard.setContent(content);
+                    event.consume();
+                });
                 selectedProperty().addListener((obs, wasSelected, isSelected) -> updateCellStyle());
+                setOnDragOver(event -> {
+                    if (!event.getDragboard().hasString()) return;
+                    CustomModelDefinition.Part source = findPart(event.getDragboard().getString());
+                    CustomModelDefinition.Part target = getItem();
+                    if (source != null && target != source && !isDescendant(source, target)) {
+                        event.acceptTransferModes(TransferMode.MOVE);
+                    }
+                    event.consume();
+                });
+                setOnDragDropped(event -> {
+                    boolean completed = false;
+                    if (event.getDragboard().hasString()) {
+                        CustomModelDefinition.Part source = findPart(event.getDragboard().getString());
+                        CustomModelDefinition.Part target = getItem();
+                        if (source != null) {
+                            double relativeY = getHeight() <= 0 ? 0.5 : event.getY() / getHeight();
+                            TreeDropPosition position = target == null ? TreeDropPosition.AFTER
+                                    : relativeY >= 0.25 && relativeY <= 0.75 ? TreeDropPosition.CHILD
+                                    : relativeY < 0.25 ? TreeDropPosition.BEFORE : TreeDropPosition.AFTER;
+                            completed = movePart(source, target, position);
+                        }
+                    }
+                    event.setDropCompleted(completed);
+                    event.consume();
+                });
             }
 
             @Override
@@ -703,7 +745,9 @@ public final class ModelStudio {
                         : "-fx-background-color: #202729; -fx-text-fill: #e4e9e5;");
             }
         });
-        partList.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> showPart(selected));
+        partList.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> {
+            if (!rebuildingPartTree && selected != null) showPart(selected.getValue());
+        });
 
         Button remove = new Button("Remove");
         remove.setOnAction(event -> removeSelectedPart());
@@ -775,13 +819,13 @@ public final class ModelStudio {
         apply.setOnAction(event -> performEdit(() -> {
             applyFields();
             refreshPreview();
-            refreshPartList(partList.getSelectionModel().getSelectedIndex());
+            refreshPartList(selectedPartIndex());
         }));
 
         colorPicker.setMaxWidth(Double.MAX_VALUE);
         colorPicker.setOnAction(event -> {
             if (syncingInspector) return;
-            CustomModelDefinition.Part selected = partList.getSelectionModel().getSelectedItem();
+            CustomModelDefinition.Part selected = selectedPart();
             if (selected != null) {
                 performEdit(() -> {
                     selected.color = colorPicker.getValue().toString();
@@ -791,28 +835,28 @@ public final class ModelStudio {
         });
         partName.textProperty().addListener((obs, oldName, newName) -> {
             if (syncingInspector) return;
-            CustomModelDefinition.Part selected = partList.getSelectionModel().getSelectedItem();
+            CustomModelDefinition.Part selected = selectedPart();
             if (selected != null && !newName.isBlank()) {
                 performEdit(() -> {
                     selected.name = newName;
-                    partList.refresh();
+                    refreshPartList(selectedPartIndex());
                 });
             }
         });
         shapePicker.setOnAction(event -> {
             if (syncingInspector) return;
-            CustomModelDefinition.Part selected = partList.getSelectionModel().getSelectedItem();
+            CustomModelDefinition.Part selected = selectedPart();
             if (selected != null && shapePicker.getValue() != null) {
                 performEdit(() -> {
                     selected.shape = shapePicker.getValue();
-                    refreshPartList(partList.getSelectionModel().getSelectedIndex());
+                    refreshPartList(selectedPartIndex());
                     refreshPreview();
                 });
             }
         });
         finishPicker.setOnAction(event -> {
             if (syncingInspector) return;
-            CustomModelDefinition.Part selected = partList.getSelectionModel().getSelectedItem();
+            CustomModelDefinition.Part selected = selectedPart();
             if (selected != null && finishPicker.getValue() != null) {
                 performEdit(() -> {
                     selected.finish = finishPicker.getValue();
@@ -953,12 +997,14 @@ public final class ModelStudio {
     }
 
     private void duplicateSelectedPart() {
-        int index = partList.getSelectionModel().getSelectedIndex();
-        if (index < 0 || index >= parts.size()) return;
+        CustomModelDefinition.Part selected = selectedPart();
+        int index = selectedPartIndex();
+        if (selected == null || index < 0 || index >= parts.size()) return;
         performEdit(() -> {
             applyFields();
-            CustomModelDefinition.Part copy = copyPart(parts.get(index));
-            copy.name = parts.get(index).name + " Copy";
+            CustomModelDefinition.Part copy = copyPart(selected);
+            copy.id = UUID.randomUUID().toString();
+            copy.name = selected.name + " Copy";
             copy.x += 4;
             copy.z += 4;
             parts.add(index + 1, copy);
@@ -968,7 +1014,7 @@ public final class ModelStudio {
     }
 
     private void moveSelectedPart(int offset) {
-        int index = partList.getSelectionModel().getSelectedIndex();
+        int index = selectedPartIndex();
         int target = index + offset;
         if (index < 0 || target < 0 || target >= parts.size()) return;
         performEdit(() -> {
@@ -982,7 +1028,7 @@ public final class ModelStudio {
 
     private void applySemanticMaterial() {
         if (syncingInspector) return;
-        CustomModelDefinition.Part part = partList.getSelectionModel().getSelectedItem();
+        CustomModelDefinition.Part part = selectedPart();
         String preset = materialPicker.getValue();
         if (part == null || preset == null) return;
         performEdit(() -> {
@@ -999,24 +1045,143 @@ public final class ModelStudio {
     }
 
     private void removeSelectedPart() {
-        int index = partList.getSelectionModel().getSelectedIndex();
-        if (index < 0 || index >= parts.size()) return;
+        CustomModelDefinition.Part selected = selectedPart();
+        int index = selectedPartIndex();
+        if (selected == null || index < 0 || index >= parts.size()) return;
         performEdit(() -> {
-            parts.remove(index);
+            Set<String> removedIds = new java.util.HashSet<>();
+            removedIds.add(selected.id);
+            boolean changed;
+            do {
+                changed = false;
+                for (CustomModelDefinition.Part part : parts) {
+                    if (removedIds.contains(part.parentId) && removedIds.add(part.id)) changed = true;
+                }
+            } while (changed);
+            parts.removeIf(part -> removedIds.contains(part.id));
             refreshPartList(Math.min(index, parts.size() - 1));
             refreshPreview();
         });
     }
 
+    private CustomModelDefinition.Part selectedPart() {
+        TreeItem<CustomModelDefinition.Part> selected = partList.getSelectionModel().getSelectedItem();
+        return selected == null ? null : selected.getValue();
+    }
+
+    private int selectedPartIndex() {
+        CustomModelDefinition.Part selected = selectedPart();
+        return selected == null ? -1 : parts.indexOf(selected);
+    }
+
+    private CustomModelDefinition.Part findPart(String id) {
+        return parts.stream().filter(part -> part.id.equals(id)).findFirst().orElse(null);
+    }
+
+    private boolean isDescendant(CustomModelDefinition.Part ancestor, CustomModelDefinition.Part candidate) {
+        if (candidate == null) return false;
+        String parentId = candidate.parentId;
+        while (parentId != null) {
+            if (parentId.equals(ancestor.id)) return true;
+            CustomModelDefinition.Part parent = findPart(parentId);
+            parentId = parent == null ? null : parent.parentId;
+        }
+        return false;
+    }
+
+    private boolean movePart(CustomModelDefinition.Part source, CustomModelDefinition.Part target,
+                             TreeDropPosition position) {
+        if (source == target || (target != null && isDescendant(source, target))) return false;
+        performEdit(() -> {
+            applyFields();
+            double worldX = worldPosition(source, part -> part.x);
+            double worldY = worldPosition(source, part -> part.y);
+            double worldZ = worldPosition(source, part -> part.z);
+            double worldRotateX = worldPosition(source, part -> part.rotateX);
+            double worldRotateY = worldPosition(source, part -> part.rotateY);
+            double worldRotateZ = worldPosition(source, part -> part.rotateZ);
+            CustomModelDefinition.Part newParent = target == null ? null
+                    : position == TreeDropPosition.CHILD ? target : findPart(target.parentId);
+            source.parentId = newParent == null ? null : newParent.id;
+            source.x = worldX - (newParent == null ? 0 : worldPosition(newParent, part -> part.x));
+            source.y = worldY - (newParent == null ? 0 : worldPosition(newParent, part -> part.y));
+            source.z = worldZ - (newParent == null ? 0 : worldPosition(newParent, part -> part.z));
+            source.rotateX = worldRotateX - (newParent == null ? 0 : worldPosition(newParent, part -> part.rotateX));
+            source.rotateY = worldRotateY - (newParent == null ? 0 : worldPosition(newParent, part -> part.rotateY));
+            source.rotateZ = worldRotateZ - (newParent == null ? 0 : worldPosition(newParent, part -> part.rotateZ));
+
+            parts.remove(source);
+            int targetIndex = target == null ? parts.size() : parts.indexOf(target);
+            int insertIndex = switch (position) {
+                case BEFORE -> targetIndex;
+                case AFTER -> targetIndex + 1;
+                case CHILD -> target == null ? parts.size() : subtreeEndIndex(target);
+            };
+            parts.add(Math.max(0, Math.min(insertIndex, parts.size())), source);
+            int selectedIndex = parts.indexOf(source);
+            refreshPartList(selectedIndex);
+            refreshPreview();
+        });
+        statusLabel.setText(target != null && position == TreeDropPosition.CHILD
+                ? "Object nested in hierarchy" : "Object order updated");
+        return true;
+    }
+
+    private double worldPosition(CustomModelDefinition.Part part,
+                                 java.util.function.ToDoubleFunction<CustomModelDefinition.Part> value) {
+        double result = 0;
+        CustomModelDefinition.Part current = part;
+        Set<String> visited = new java.util.HashSet<>();
+        while (current != null && visited.add(current.id)) {
+            result += value.applyAsDouble(current);
+            current = current.parentId == null ? null : findPart(current.parentId);
+        }
+        return result;
+    }
+
+    private int subtreeEndIndex(CustomModelDefinition.Part parent) {
+        int index = parts.indexOf(parent) + 1;
+        while (index < parts.size() && isDescendant(parent, parts.get(index))) index++;
+        return index;
+    }
+
+    private void expandTree(TreeItem<CustomModelDefinition.Part> item) {
+        item.setExpanded(true);
+        for (TreeItem<CustomModelDefinition.Part> child : item.getChildren()) expandTree(child);
+    }
+
+    private enum TreeDropPosition { BEFORE, CHILD, AFTER }
+
     private void refreshPartList(int selectedIndex) {
         if (parts.isEmpty()) {
+            rebuildingPartTree = true;
+            partList.setRoot(new TreeItem<>());
             partList.getSelectionModel().clearSelection();
-            partList.refresh();
+            rebuildingPartTree = false;
             return;
         }
         int safeIndex = Math.max(0, Math.min(selectedIndex, parts.size() - 1));
-        partList.getSelectionModel().select(safeIndex);
-        partList.refresh();
+        String selectedId = parts.get(safeIndex).id;
+        rebuildingPartTree = true;
+        TreeItem<CustomModelDefinition.Part> rootItem = new TreeItem<>();
+        rootItem.setExpanded(true);
+        java.util.Map<String, TreeItem<CustomModelDefinition.Part>> items = new java.util.LinkedHashMap<>();
+        for (CustomModelDefinition.Part part : parts) {
+            items.put(part.id, new TreeItem<>(part));
+        }
+        for (CustomModelDefinition.Part part : parts) {
+            TreeItem<CustomModelDefinition.Part> item = items.get(part.id);
+            TreeItem<CustomModelDefinition.Part> parent = items.get(part.parentId);
+            (parent == null ? rootItem : parent).getChildren().add(item);
+        }
+        expandTree(rootItem);
+        partList.setRoot(rootItem);
+        TreeItem<CustomModelDefinition.Part> selected = items.get(selectedId);
+        if (selected != null) {
+            partList.getSelectionModel().select(selected);
+            showPart(selected.getValue());
+        }
+        rebuildingPartTree = false;
     }
 
     private void showPart(CustomModelDefinition.Part part) {
@@ -1041,7 +1206,7 @@ public final class ModelStudio {
     }
 
     private void applyFields() {
-        CustomModelDefinition.Part part = partList.getSelectionModel().getSelectedItem();
+        CustomModelDefinition.Part part = selectedPart();
         if (part == null) return;
         part.x = parse(values[0], part.x);
         part.y = parse(values[1], part.y);
@@ -1062,9 +1227,10 @@ public final class ModelStudio {
     private void refreshPreview() {
         applyFields();
         partRoot.getChildren().clear();
-        for (CustomModelDefinition.Part part : parts) {
-            partRoot.getChildren().add(CustomModelLibrary.createPartNode(part));
-        }
+        Group hierarchy = CustomModelLibrary.createHierarchy(parts);
+        List<Node> rootNodes = List.copyOf(hierarchy.getChildren());
+        hierarchy.getChildren().clear();
+        partRoot.getChildren().setAll(rootNodes);
     }
 
     private void paintPickedComponent(Node pickedNode) {
@@ -1112,17 +1278,13 @@ public final class ModelStudio {
             }
             performEdit(() -> {
                 int firstAdded = parts.size();
-                for (CustomModelDefinition.Part source : template.parts) {
-                    CustomModelDefinition.Part copy = copyPart(source);
-                    copy.name = template.name + " / " + source.name;
-                    parts.add(copy);
-                }
+                appendImportedParts(template);
                 nextPartNumber = parts.size() + 1;
                 refreshPartList(firstAdded);
                 refreshPreview();
                 statusLabel.setText("Added template: " + template.name);
             });
-        } catch (IOException ex) {
+        } catch (IOException | IllegalArgumentException ex) {
             throw new IllegalArgumentException(ex.getMessage(), ex);
         }
     }
@@ -1185,7 +1347,7 @@ public final class ModelStudio {
                 refreshPartList(parts.isEmpty() ? -1 : 0);
                 refreshPreview();
             });
-        } catch (IOException ex) {
+        } catch (IOException | IllegalArgumentException ex) {
             error("Could not open model", ex.getMessage());
         }
     }
@@ -1231,23 +1393,21 @@ public final class ModelStudio {
             CustomModelDefinition component = CustomModelLibrary.read(selected.toPath());
             performEdit(() -> {
                 int firstAdded = parts.size();
-                for (CustomModelDefinition.Part source : component.parts) {
-                    CustomModelDefinition.Part copy = copyPart(source);
-                    copy.name = component.name + " / " + source.name;
-                    parts.add(copy);
-                }
+                appendImportedParts(component);
                 nextPartNumber = parts.size() + 1;
                 refreshPartList(firstAdded);
                 refreshPreview();
                 modelName.requestFocus();
             });
-        } catch (IOException ex) {
+        } catch (IOException | IllegalArgumentException ex) {
             error("Could not add component", ex.getMessage());
         }
     }
 
     private CustomModelDefinition.Part copyPart(CustomModelDefinition.Part source) {
         CustomModelDefinition.Part copy = new CustomModelDefinition.Part();
+        copy.id = source.id;
+        copy.parentId = source.parentId;
         copy.name = source.name;
         copy.shape = source.shape;
         copy.x = source.x;
@@ -1263,6 +1423,20 @@ public final class ModelStudio {
         copy.material = source.material;
         copy.finish = source.finish;
         return copy;
+    }
+
+    private void appendImportedParts(CustomModelDefinition sourceModel) {
+        java.util.Map<String, String> importedIds = new java.util.HashMap<>();
+        for (CustomModelDefinition.Part source : sourceModel.parts) {
+            importedIds.put(source.id, UUID.randomUUID().toString());
+        }
+        for (CustomModelDefinition.Part source : sourceModel.parts) {
+            CustomModelDefinition.Part copy = copyPart(source);
+            copy.id = importedIds.get(source.id);
+            copy.parentId = importedIds.get(source.parentId);
+            copy.name = sourceModel.name + " / " + source.name;
+            parts.add(copy);
+        }
     }
 
     private void performEdit(Runnable edit) {
@@ -1283,7 +1457,7 @@ public final class ModelStudio {
         List<CustomModelDefinition.Part> copies = parts.stream().map(this::copyPart).toList();
         TileOption selectedTile = tilePicker.getValue();
         return new EditorSnapshot(modelName.getText(), selectedTile == null ? 0 : selectedTile.id,
-                currentFile, copies, partList.getSelectionModel().getSelectedIndex());
+                currentFile, copies, selectedPartIndex());
     }
 
     private boolean sameModel(EditorSnapshot left, EditorSnapshot right) {
@@ -1296,6 +1470,8 @@ public final class ModelStudio {
             CustomModelDefinition.Part a = left.parts.get(i);
             CustomModelDefinition.Part b = right.parts.get(i);
             if (!java.util.Objects.equals(a.name, b.name)
+                    || !java.util.Objects.equals(a.id, b.id)
+                    || !java.util.Objects.equals(a.parentId, b.parentId)
                     || !java.util.Objects.equals(a.shape, b.shape)
                     || Double.compare(a.x, b.x) != 0 || Double.compare(a.y, b.y) != 0
                     || Double.compare(a.z, b.z) != 0 || Double.compare(a.width, b.width) != 0

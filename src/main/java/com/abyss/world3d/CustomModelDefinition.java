@@ -2,6 +2,7 @@ package com.abyss.world3d;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /** JSON-backed editable model composed of simple 3D primitives. */
 public final class CustomModelDefinition {
@@ -10,6 +11,8 @@ public final class CustomModelDefinition {
     public List<Part> parts = new ArrayList<>();
 
     public static final class Part {
+        public String id = UUID.randomUUID().toString();
+        public String parentId;
         public String name = "Part";
         public String shape = "BOX";
         public double x;

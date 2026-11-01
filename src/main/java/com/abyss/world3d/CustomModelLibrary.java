@@ -22,8 +22,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 
@@ -57,13 +59,28 @@ public final class CustomModelLibrary {
         CustomModelDefinition definition = modelsByTile.get(tileId);
         if (definition == null || definition.parts == null) return null;
 
+        return createHierarchy(definition.parts);
+    }
+
+    public static Group createHierarchy(List<CustomModelDefinition.Part> parts) {
         Group model = new Group();
-        for (CustomModelDefinition.Part part : definition.parts) {
+        Map<String, Group> nodesById = new HashMap<>();
+        for (CustomModelDefinition.Part part : parts) {
             if (part == null) continue;
             try {
-                model.getChildren().add(createPartNode(part));
+                nodesById.put(part.id, createPartNode(part));
             } catch (RuntimeException ex) {
-                LOG.warning("Skipping invalid part in " + definition.name + ": " + ex.getMessage());
+                LOG.warning("Skipping invalid model part: " + ex.getMessage());
+            }
+        }
+        for (CustomModelDefinition.Part part : parts) {
+            Group node = nodesById.get(part.id);
+            Group parent = nodesById.get(part.parentId);
+            if (node == null) continue;
+            if (parent == null) {
+                model.getChildren().add(node);
+            } else {
+                parent.getChildren().add(node);
             }
         }
         return model;
@@ -98,6 +115,12 @@ public final class CustomModelLibrary {
         for (int index = 0; index < definition.parts.size(); index++) {
             CustomModelDefinition.Part part = definition.parts.get(index);
             if (part == null) throw new IllegalArgumentException("Component " + (index + 1) + " is empty.");
+            if (part.id == null || part.id.isBlank()) {
+                throw new IllegalArgumentException("Component " + (index + 1) + " needs an identifier.");
+            }
+            if (part.id.equals(part.parentId)) {
+                throw new IllegalArgumentException("Component " + (index + 1) + " cannot parent itself.");
+            }
             if (part.shape == null || !List.of("BOX", "SPHERE", "CYLINDER", "CONE", "RING")
                     .contains(part.shape.toUpperCase())) {
                 throw new IllegalArgumentException("Component " + (index + 1) + " has an unsupported shape.");
@@ -118,11 +141,31 @@ public final class CustomModelLibrary {
                 }
             }
         }
+        Set<String> ids = new HashSet<>();
+        Map<String, CustomModelDefinition.Part> partsById = new HashMap<>();
+        for (CustomModelDefinition.Part part : definition.parts) {
+            if (!ids.add(part.id)) throw new IllegalArgumentException("Components must have unique identifiers.");
+            partsById.put(part.id, part);
+        }
+        for (CustomModelDefinition.Part part : definition.parts) {
+            if (part.parentId != null && !ids.contains(part.parentId)) {
+                throw new IllegalArgumentException("Component " + part.name + " has a missing parent.");
+            }
+            Set<String> ancestors = new HashSet<>();
+            CustomModelDefinition.Part current = part;
+            while (current.parentId != null) {
+                if (!ancestors.add(current.id)) {
+                    throw new IllegalArgumentException("Component hierarchy cannot contain a cycle.");
+                }
+                current = partsById.get(current.parentId);
+            }
+        }
     }
 
     public static CustomModelDefinition read(Path file) throws IOException {
         CustomModelDefinition definition = MAPPER.readValue(file.toFile(), CustomModelDefinition.class);
         if (definition.parts == null) definition.parts = new java.util.ArrayList<>();
+        validate(definition);
         return definition;
     }
 
@@ -182,14 +225,14 @@ public final class CustomModelLibrary {
         PhongMaterial material = new PhongMaterial(color);
         semanticMaterial.applyTo(material, part.finish);
         shape.setMaterial(material);
-        shape.setTranslateX(part.x);
-        shape.setTranslateY(-part.y);
-        shape.setTranslateZ(part.z);
-        shape.getTransforms().addAll(
+        Group wrapper = new Group(shape);
+        wrapper.setTranslateX(part.x);
+        wrapper.setTranslateY(-part.y);
+        wrapper.setTranslateZ(part.z);
+        wrapper.getTransforms().addAll(
                 new Rotate(part.rotateX, Rotate.X_AXIS),
                 new Rotate(part.rotateY, Rotate.Y_AXIS),
                 new Rotate(part.rotateZ, Rotate.Z_AXIS));
-        Group wrapper = new Group(shape);
         wrapper.setUserData(part);
         return wrapper;
     }
