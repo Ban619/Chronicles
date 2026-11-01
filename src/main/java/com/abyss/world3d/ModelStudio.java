@@ -1727,6 +1727,9 @@ public final class ModelStudio {
         Button selectDescendants = new Button("Kids");
         selectDescendants.setTooltip(new javafx.scene.control.Tooltip("Select all visible descendants of the active component"));
         selectDescendants.setOnAction(event -> selectRelatedHierarchy(HierarchySelection.DESCENDANTS));
+        Button selectChildren = new Button("Child");
+        selectChildren.setTooltip(new javafx.scene.control.Tooltip("Select the active component's visible direct children"));
+        selectChildren.setOnAction(event -> selectRelatedHierarchy(HierarchySelection.CHILDREN));
         Button selectPeers = new Button("Peers");
         selectPeers.setTooltip(new javafx.scene.control.Tooltip("Select the active component and its visible siblings"));
         selectPeers.setOnAction(event -> selectRelatedHierarchy(HierarchySelection.SIBLINGS));
@@ -1747,7 +1750,8 @@ public final class ModelStudio {
         hierarchyActions.setMaxWidth(Double.MAX_VALUE);
         Button[] hierarchyButtons = {
                 duplicate, moveUp, moveDown, hide, showAll, remove,
-                selectParent, selectRoot, selectDescendants, selectPeers, expandAll, collapseAll
+                selectParent, selectRoot, selectDescendants, selectChildren, selectPeers,
+                expandAll, collapseAll
         };
         for (int index = 0; index < hierarchyButtons.length; index++) {
             int column = index % 3;
@@ -2146,6 +2150,11 @@ public final class ModelStudio {
                     .filter(this::isEffectivelyVisible)
                     .filter(part -> findTreeItem(partList.getRoot(), part) != null)
                     .toList();
+            case CHILDREN -> parts.stream()
+                    .filter(part -> active.id.equals(part.parentId))
+                    .filter(this::isEffectivelyVisible)
+                    .filter(part -> findTreeItem(partList.getRoot(), part) != null)
+                    .toList();
             case PARENT -> {
                 CustomModelDefinition.Part parent = active.parentId == null
                         ? null : findPart(active.parentId);
@@ -2177,6 +2186,7 @@ public final class ModelStudio {
                 case PARENT -> "No visible parent to select";
                 case ROOT -> "No visible root component to select";
                 case DESCENDANTS -> "No visible descendants to select";
+                case CHILDREN -> "No visible direct children to select";
                 case SIBLINGS -> "No visible siblings to select";
             });
             return;
@@ -2200,6 +2210,7 @@ public final class ModelStudio {
                         case PARENT -> " parent component";
                         case ROOT -> " root component";
                         case DESCENDANTS -> " visible descendant(s)";
+                        case CHILDREN -> " visible direct child(ren)";
                         case SIBLINGS -> " visible sibling component(s)";
                     });
         }
@@ -2557,7 +2568,7 @@ public final class ModelStudio {
 
     private enum TransformOperation { MOVE, ROTATE, SCALE }
 
-    private enum HierarchySelection { PARENT, ROOT, DESCENDANTS, SIBLINGS }
+    private enum HierarchySelection { PARENT, ROOT, DESCENDANTS, CHILDREN, SIBLINGS }
 
     private enum TreeDropPosition { BEFORE, CHILD, AFTER }
 
