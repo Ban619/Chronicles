@@ -1714,6 +1714,9 @@ public final class ModelStudio {
         Button selectParent = new Button("Parent");
         selectParent.setTooltip(new javafx.scene.control.Tooltip("Select the active component's parent"));
         selectParent.setOnAction(event -> selectRelatedHierarchy(HierarchySelection.PARENT));
+        Button selectRoot = new Button("Root");
+        selectRoot.setTooltip(new javafx.scene.control.Tooltip("Select the active component's top-level ancestor"));
+        selectRoot.setOnAction(event -> selectRelatedHierarchy(HierarchySelection.ROOT));
         Button selectDescendants = new Button("Kids");
         selectDescendants.setTooltip(new javafx.scene.control.Tooltip("Select all visible descendants of the active component"));
         selectDescendants.setOnAction(event -> selectRelatedHierarchy(HierarchySelection.DESCENDANTS));
@@ -1737,7 +1740,7 @@ public final class ModelStudio {
         hierarchyActions.setMaxWidth(Double.MAX_VALUE);
         Button[] hierarchyButtons = {
                 duplicate, moveUp, moveDown, hide, showAll, remove,
-                selectParent, selectDescendants, selectPeers, expandAll, collapseAll
+                selectParent, selectRoot, selectDescendants, selectPeers, expandAll, collapseAll
         };
         for (int index = 0; index < hierarchyButtons.length; index++) {
             int column = index % 3;
@@ -2143,6 +2146,18 @@ public final class ModelStudio {
                         || findTreeItem(partList.getRoot(), parent) == null
                         ? List.of() : List.of(parent);
             }
+            case ROOT -> {
+                CustomModelDefinition.Part ancestor = active;
+                Set<String> visited = new java.util.HashSet<>();
+                while (ancestor.parentId != null && visited.add(ancestor.id)) {
+                    CustomModelDefinition.Part parent = findPart(ancestor.parentId);
+                    if (parent == null) break;
+                    ancestor = parent;
+                }
+                yield isEffectivelyVisible(ancestor)
+                        && findTreeItem(partList.getRoot(), ancestor) != null
+                        ? List.of(ancestor) : List.of();
+            }
             case SIBLINGS -> parts.stream()
                     .filter(part -> java.util.Objects.equals(part.parentId, active.parentId))
                     .filter(this::isEffectivelyVisible)
@@ -2153,6 +2168,7 @@ public final class ModelStudio {
         if (related.isEmpty()) {
             statusLabel.setText(switch (selection) {
                 case PARENT -> "No visible parent to select";
+                case ROOT -> "No visible root component to select";
                 case DESCENDANTS -> "No visible descendants to select";
                 case SIBLINGS -> "No visible siblings to select";
             });
@@ -2175,6 +2191,7 @@ public final class ModelStudio {
             statusLabel.setText("Selected " + related.size()
                     + switch (selection) {
                         case PARENT -> " parent component";
+                        case ROOT -> " root component";
                         case DESCENDANTS -> " visible descendant(s)";
                         case SIBLINGS -> " visible sibling component(s)";
                     });
@@ -2533,7 +2550,7 @@ public final class ModelStudio {
 
     private enum TransformOperation { MOVE, ROTATE, SCALE }
 
-    private enum HierarchySelection { PARENT, DESCENDANTS, SIBLINGS }
+    private enum HierarchySelection { PARENT, ROOT, DESCENDANTS, SIBLINGS }
 
     private enum TreeDropPosition { BEFORE, CHILD, AFTER }
 
