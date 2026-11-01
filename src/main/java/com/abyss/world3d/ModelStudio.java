@@ -3,6 +3,7 @@ package com.abyss.world3d;
 import com.abyss.world.Tile;
 import javafx.beans.binding.Bindings;
 import javafx.collections.FXCollections;
+import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
@@ -1680,13 +1681,19 @@ public final class ModelStudio {
             if (!rebuildingPartTree && selected != null) {
                 selectedPartId = selected.getValue().id;
                 showPart(selected.getValue());
+                updateSelectionSummary();
                 drawTransformGizmo();
             } else if (!rebuildingPartTree && partList.getSelectionModel().getSelectedItems().isEmpty()) {
                 selectedPartId = null;
                 showPart(null);
+                updateSelectionSummary();
                 drawTransformGizmo();
             }
         });
+        partList.getSelectionModel().getSelectedItems().addListener(
+                (ListChangeListener<TreeItem<CustomModelDefinition.Part>>) change -> {
+                    if (!rebuildingPartTree) updateSelectionSummary();
+                });
         hierarchySearch.setPromptText("Search scene objects");
         hierarchySearch.setStyle("-fx-background-color: #171e20; -fx-text-fill: #e4e9e5;"
                 + "-fx-prompt-text-fill: #87918d; -fx-border-color: #3b4648;");
@@ -2583,6 +2590,7 @@ public final class ModelStudio {
             partList.getSelectionModel().clearSelection();
             rebuildingPartTree = false;
             selectedPartId = null;
+            updateSelectionSummary();
             return;
         }
         String selectedId = selectedIndex >= 0 && selectedIndex < parts.size()
@@ -2635,6 +2643,21 @@ public final class ModelStudio {
             selectedPartId = selected.getValue().id;
         }
         rebuildingPartTree = false;
+        updateSelectionSummary();
+    }
+
+    private void updateSelectionSummary() {
+        if (inspectorSelectionLabel == null) return;
+        List<TreeItem<CustomModelDefinition.Part>> selectedItems =
+                partList.getSelectionModel().getSelectedItems();
+        if (selectedItems.isEmpty()) {
+            inspectorSelectionLabel.setText("NO COMPONENT SELECTED");
+            return;
+        }
+        TreeItem<CustomModelDefinition.Part> active = partList.getSelectionModel().getSelectedItem();
+        if (active == null) active = selectedItems.get(selectedItems.size() - 1);
+        inspectorSelectionLabel.setText("ACTIVE: " + active.getValue().name
+                + " · " + selectedItems.size() + " SELECTED");
     }
 
     private boolean matchesPartOrDescendant(CustomModelDefinition.Part part, String query) {
