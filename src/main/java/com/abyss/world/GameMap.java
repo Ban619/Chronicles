@@ -14,6 +14,7 @@ import javafx.scene.paint.Color;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 /**
@@ -97,21 +98,20 @@ public class GameMap {
         border(Tile.WALL_STONE);
         int mid = rows / 2;
         for (int c = 4; c < cols-4; c++) { groundLayer[mid][c]=Tile.WATER; groundLayer[mid+1][c]=Tile.WATER; }
-        for (int c = cols/2-1; c <= cols/2+1; c++) { groundLayer[mid][c]=Tile.BRIDGE; groundLayer[mid+1][c]=Tile.BRIDGE; }
-            for (int c=5; c<cols-5; c++) { groundLayer[mid-2][c] = Tile.FLOOR_STONE; }
-            for (int c=cols/2-1;c<cols;c++) {
-                groundLayer[mid][c]=Tile.BRIDGE;
-                groundLayer[mid+1][c]=Tile.BRIDGE;
-            }
-            for (int r=mid;r<rows;r++) {
-                groundLayer[r][cols/2-1]=Tile.DIRT;
-                groundLayer[r][cols/2]=Tile.DIRT;
-                groundLayer[r][cols/2+1]=Tile.DIRT;
-                objectLayer[r][cols/2-1]=0;
-                objectLayer[r][cols/2]=0;
-                objectLayer[r][cols/2+1]=0;
-            }
-            for (int r=mid-4;r<=mid+4;r++) objectLayer[r][cols-1]=0;
+        for (int c = cols / 2 - 1; c < cols; c++) {
+            groundLayer[mid][c] = Tile.BRIDGE;
+            groundLayer[mid + 1][c] = Tile.BRIDGE;
+        }
+        for (int c = 5; c < cols - 5; c++) groundLayer[mid - 2][c] = Tile.FLOOR_STONE;
+        for (int r = mid; r < rows; r++) {
+            groundLayer[r][cols / 2 - 1] = Tile.DIRT;
+            groundLayer[r][cols / 2] = Tile.DIRT;
+            groundLayer[r][cols / 2 + 1] = Tile.DIRT;
+            objectLayer[r][cols / 2 - 1] = 0;
+            objectLayer[r][cols / 2] = 0;
+            objectLayer[r][cols / 2 + 1] = 0;
+        }
+        for (int r = mid - 4; r <= mid + 4; r++) objectLayer[r][cols - 1] = 0;
         int[][] trees = {{3,3},{4,3},{8,2},{9,2},{cols-4,3},{cols-5,4},{2,rows-3},{cols-3,rows-4}};
         for (int[] t : trees) {
             if (inBounds(t[1],t[0])) { objectLayer[t[1]][t[0]]=Tile.TREE_BASE; if(inBounds(t[1]-1,t[0])) overlayLayer[t[1]-1][t[0]]=Tile.TREE_TOP; }
@@ -424,6 +424,54 @@ public class GameMap {
         return true;
     }
 
+    public void ensureRelicRecoverable(Player player) {
+        if (biome != Biome.DUNGEON
+                || player.getChapterOne().getStage() != ChapterOneProgress.Stage.DEFEAT_MALACHAR
+                || player.hasItem("crypt_relic")
+                || !inBounds(relicRow, relicCol)) return;
+        objectLayer[relicRow][relicCol] = Tile.CHEST;
+        tileCache[relicRow][relicCol] = new Tile(Tile.CHEST);
+    }
+
+    public Map<String, Object> toPersistentState() {
+        List<Integer> openedChests = new ArrayList<>();
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < cols; col++) {
+                if (objectLayer[row][col] == Tile.CHEST_OPEN)
+                    openedChests.add(row * cols + col);
+            }
+        }
+        return java.util.Map.of("openedChests", openedChests);
+    }
+
+    public void resetPersistentState() {
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < cols; col++) {
+                if (objectLayer[row][col] == Tile.CHEST_OPEN) {
+                    objectLayer[row][col] = Tile.CHEST;
+                    tileCache[row][col] = new Tile(Tile.CHEST);
+                }
+            }
+        }
+    }
+
+    public void restorePersistentState(Map<?, ?> state) {
+        resetPersistentState();
+        if (state == null) return;
+        Object rawOpenedChests = state.get("openedChests");
+        if (!(rawOpenedChests instanceof List<?> openedChests)) return;
+        for (Object value : openedChests) {
+            if (!(value instanceof Number indexValue)) continue;
+            int index = indexValue.intValue();
+            if (index < 0 || index >= rows * cols) continue;
+            int row = index / cols;
+            int col = index % cols;
+            if (objectLayer[row][col] != Tile.CHEST && objectLayer[row][col] != Tile.CHEST_OPEN) continue;
+            objectLayer[row][col] = Tile.CHEST_OPEN;
+            tileCache[row][col] = new Tile(Tile.CHEST_OPEN);
+        }
+    }
+
     private void dropCraftingLoot(Enemy enemy) {
         if (Math.random() > 0.72) return;
         String[] loot = switch (biome) {
@@ -597,19 +645,24 @@ public class GameMap {
                         objectLayer[nearestRow][nearestCol] = nearestTile.getId();
                         return "The Dawn Seal is already in your pack. Take it to Dragon's Maw.";
                     }
-                    if (progress.getStage() != ChapterOneProgress.Stage.FIND_CRYPT_RELIC)
+                    ChapterOneProgress.Stage stage = progress.getStage();
+                    if (stage != ChapterOneProgress.Stage.FIND_CRYPT_RELIC
+                            && stage != ChapterOneProgress.Stage.DEFEAT_MALACHAR)
                         return "The sealed reliquary does not respond. Elder Aldric may know what it needs.";
                     Item relic = new Material("crypt_relic", "Dawn Seal",
                             "An ancient seal that opens the path to Dragon's Maw.",
                             "crypt_relic", 1, 1, 0, Item.Rarity.EPIC);
                     if (!player.canAddItem(relic) || !player.addItem(relic))
                         return "Your pack is full. Make room before taking the Dawn Seal.";
-                    if (!progress.recoverCryptRelic())
+                    if (stage == ChapterOneProgress.Stage.FIND_CRYPT_RELIC
+                            && !progress.recoverCryptRelic())
                         return "The Dawn Seal remains bound. Speak with Elder Aldric first.";
                     nearestTile.openChest();
                     objectLayer[nearestRow][nearestCol] = nearestTile.getId();
                     assetLoader.playSfx("audio/item_pickup.mp3");
-                    return "You recovered the Dawn Seal. Carry it through Thornwood to Dragon's Maw.";
+                    return stage == ChapterOneProgress.Stage.FIND_CRYPT_RELIC
+                            ? "You recovered the Dawn Seal. Carry it through Thornwood to Dragon's Maw."
+                            : "You recovered the missing Dawn Seal. Carry it to Dragon's Maw.";
                 }
                 nearestTile.openChest();
                 objectLayer[nearestRow][nearestCol] = nearestTile.getId();

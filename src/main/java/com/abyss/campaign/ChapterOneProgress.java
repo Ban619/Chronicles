@@ -63,6 +63,10 @@ public final class ChapterOneProgress {
         return stage == Stage.DEFEAT_MALACHAR;
     }
 
+    public boolean canEnterCrypt() {
+        return stage == Stage.FIND_CRYPT_RELIC || stage == Stage.DEFEAT_MALACHAR;
+    }
+
     public String getObjective() {
         return switch (stage) {
             case MEET_ELDER -> "Find Elder Aldric";

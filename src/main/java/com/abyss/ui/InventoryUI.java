@@ -271,6 +271,8 @@ public final class InventoryUI {
                     : "Select an equipment item to equip it.";
         }
         if (input.isJustPressed("d")) {
+            if ("crypt_relic".equals(item.getId()))
+                return "Quest items cannot be dropped.";
             if (player.removeItem(slot)) {
                 map.dropItem(item, player.getX() + player.getWidth() + 4, player.getY());
                 return "Dropped " + item + ".";

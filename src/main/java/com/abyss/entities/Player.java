@@ -309,6 +309,7 @@ public class Player extends Entity {
 
     public boolean removeItem(int slot) {
         if (slot < 0 || slot >= INVENTORY_SIZE || inventory[slot] == null) return false;
+        if (isQuestCriticalItem(inventory[slot])) return false;
         inventory[slot] = null;
         return true;
     }
@@ -327,7 +328,8 @@ public class Player extends Entity {
 
     public boolean removeItems(java.util.Map<String, Integer> required) {
         for (var entry : required.entrySet()) {
-            if (entry.getValue() < 0 || countItems(entry.getKey()) < entry.getValue()) return false;
+            if (entry.getValue() < 0 || isQuestCriticalItem(entry.getKey())
+                    || countItems(entry.getKey()) < entry.getValue()) return false;
         }
         for (var entry : required.entrySet()) {
             int remaining = entry.getValue();
@@ -340,6 +342,14 @@ public class Player extends Entity {
             }
         }
         return true;
+    }
+
+    private boolean isQuestCriticalItem(Item item) {
+        return isQuestCriticalItem(item.getId());
+    }
+
+    private boolean isQuestCriticalItem(String itemId) {
+        return "crypt_relic".equals(itemId);
     }
 
     public boolean equipInventoryItem(int slot) {

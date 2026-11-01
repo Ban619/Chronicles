@@ -1,7 +1,6 @@
 package com.abyss.world;
 
 import com.abyss.entities.Player;
-import com.abyss.campaign.ChapterOneProgress;
 import com.abyss.items.Item;
 import com.abyss.utils.AssetLoader;
 import javafx.scene.canvas.GraphicsContext;
@@ -11,6 +10,7 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.TextAlignment;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.logging.Logger;
 
@@ -56,6 +56,7 @@ public class WorldManager {
 
     // ── Map registry ──────────────────────────────────────────────────────
     private final Map<String, GameMap> cache = new HashMap<>();
+    private final Map<String, Object> deferredMapStates = new HashMap<>();
     private GameMap activeMap;
     private String  activeMapPath;
 
@@ -87,7 +88,10 @@ public class WorldManager {
     private GameMap loadOrGet(String path) {
         return cache.computeIfAbsent(path, p -> {
             LOG.info("[WorldManager] Loading map: " + p);
-            return new GameMap(p, assetLoader);
+            GameMap map = new GameMap(p, assetLoader);
+            Object savedState = deferredMapStates.get(p);
+            if (savedState instanceof Map<?, ?> state) map.restorePersistentState(state);
+            return map;
         });
     }
 
@@ -95,6 +99,7 @@ public class WorldManager {
     public void update(double dt, Player player) {
         // Update transition cooldowns on active map
         activeMap.updateTransitions(dt);
+        activeMap.ensureRelicRecoverable(player);
 
         // Banner countdown
         if (bannerTimer > 0) bannerTimer -= dt;
@@ -104,8 +109,7 @@ public class WorldManager {
             MapTransition hit = activeMap.checkTransitionTrigger(player);
             if (hit != null) {
                 if ("maps/crypt_of_echoes.json".equals(hit.getTargetMapPath())
-                        && player.getChapterOne().getStage()
-                        != ChapterOneProgress.Stage.FIND_CRYPT_RELIC) {
+                        && !player.getChapterOne().canEnterCrypt()) {
                     activeMap.spawnParticle(player.getX(), player.getY() - 20,
                             "Speak with Elder Aldric before entering the Crypt.",
                             Color.web("#c8a96e"));
@@ -213,6 +217,28 @@ public class WorldManager {
         bannerText = activeMap.getMapName();
         bannerTimer = 3.5;
         return true;
+    }
+
+    public Map<String, Object> getPersistentMapStates() {
+        Map<String, Object> states = new LinkedHashMap<>();
+        cache.forEach((path, map) -> states.put(path, map.toPersistentState()));
+        return states;
+    }
+
+    public void restorePersistentMapStates(Map<?, ?> states) {
+        deferredMapStates.clear();
+        if (states == null) return;
+        states.forEach((path, state) -> {
+            if (path instanceof String mapPath && assetLoader.mapExists(mapPath)
+                    && state instanceof Map<?, ?> mapState) {
+                deferredMapStates.put(mapPath, new LinkedHashMap<>(mapState));
+            }
+        });
+        cache.forEach((path, map) -> {
+            Object state = deferredMapStates.get(path);
+            if (state instanceof Map<?, ?> mapState) map.restorePersistentState(mapState);
+            else map.resetPersistentState();
+        });
     }
 
     // ── Render ────────────────────────────────────────────────────────────

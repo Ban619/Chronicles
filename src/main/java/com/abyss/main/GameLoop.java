@@ -177,7 +177,8 @@ public class GameLoop extends AnimationTimer {
         }
 
         if (input.isJustPressed("f5") && !inputBlocked) {
-            boolean saved = saveLoad.save(1, player, world.getActiveMap().getMapName(), world.getActivePath());
+            boolean saved = saveLoad.save(1, player, world.getActiveMap().getMapName(),
+                    world.getActivePath(), world);
             hud.showNotification(saved ? "Game saved" : "Save failed", Color.web("#c8a96e"));
         }
         if (input.isJustPressed("f9") && !inputBlocked) {

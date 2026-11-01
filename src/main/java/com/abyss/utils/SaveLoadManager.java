@@ -39,24 +39,29 @@ import java.util.logging.Logger;
 public class SaveLoadManager {
 
     private static final Logger LOG    = Logger.getLogger(SaveLoadManager.class.getName());
-    private static final String SAVE_DIR = System.getProperty("user.home")
-                                           + File.separator + ".chronicles_abyss"
-                                           + File.separator + "saves";
+    private static final File DEFAULT_SAVE_DIR = new File(System.getProperty("user.home"),
+            ".chronicles_abyss" + File.separator + "saves");
     private static final int   SLOTS  = 3;
 
+    private final File saveDir;
     private final ObjectMapper mapper;
 
     // ─────────────────────────────────────────────────────────────────────
     public SaveLoadManager() {
+        this(DEFAULT_SAVE_DIR);
+    }
+
+    SaveLoadManager(File saveDir) {
+        this.saveDir = saveDir;
         mapper = new ObjectMapper();
         mapper.enable(SerializationFeature.INDENT_OUTPUT);
         ensureSaveDir();
     }
 
     private void ensureSaveDir() {
-        File dir = new File(SAVE_DIR);
+        File dir = saveDir;
         if (!dir.exists() && !dir.mkdirs()) {
-            LOG.warning("[Save] Could not create save directory: " + SAVE_DIR);
+            LOG.warning("[Save] Could not create save directory: " + saveDir);
         }
     }
 
@@ -69,11 +74,16 @@ public class SaveLoadManager {
     }
 
     public boolean save(int slot, Player player, String mapName, String mapPath) {
+        return save(slot, player, mapName, mapPath, null);
+    }
+
+    public boolean save(int slot, Player player, String mapName, String mapPath, WorldManager world) {
         if (!validSlot(slot)) return false;
         Map<String, Object> data = buildSaveData(player, mapName, mapPath);
-        String filename = slotFilename(slot);
+        if (world != null) data.put("world", world.getPersistentMapStates());
         try {
-            mapper.writeValue(new File(SAVE_DIR + File.separator + filename), data);
+            mapper.writeValue(slotFile(slot), data);
+            String filename = slotFilename(slot);
             LOG.info("[Save] Game saved to slot " + slot + " (" + filename + ")");
             return true;
         } catch (IOException e) {
@@ -95,8 +105,7 @@ public class SaveLoadManager {
     @SuppressWarnings("unchecked")
     public boolean load(int slot, Player player) {
         if (!validSlot(slot)) return false;
-        String path = SAVE_DIR + File.separator + slotFilename(slot);
-        File file = new File(path);
+        File file = slotFile(slot);
         if (!file.exists()) {
             LOG.info("[Save] No save in slot " + slot);
             return false;
@@ -117,7 +126,7 @@ public class SaveLoadManager {
     @SuppressWarnings("unchecked")
     public boolean load(int slot, Player player, WorldManager world) {
         if (!validSlot(slot)) return false;
-        File file = new File(SAVE_DIR + File.separator + slotFilename(slot));
+        File file = slotFile(slot);
         if (!file.exists()) return false;
         try {
             Map<String, Object> data = mapper.readValue(file, Map.class);
@@ -126,6 +135,8 @@ public class SaveLoadManager {
             if (playerData == null || mapData == null) return false;
             String mapPath = mapData.get("path") instanceof String path ? path : null;
             if (mapPath != null && !world.canLoadSavedLocation(mapPath)) return false;
+            Object mapStates = data.get("world");
+            if (mapStates instanceof Map<?, ?> states) world.restorePersistentMapStates(states);
             player.restoreFromSaveMap(playerData);
             restoreInventory(player, playerData);
             float x = player.getX();
@@ -281,7 +292,7 @@ public class SaveLoadManager {
     // ── Slot info ─────────────────────────────────────────────────────────
     public boolean slotExists(int slot) {
         if (!validSlot(slot)) return false;
-        return new File(SAVE_DIR + File.separator + slotFilename(slot)).exists();
+        return slotFile(slot).exists();
     }
 
     public String slotSummary(int slot) {
@@ -289,7 +300,7 @@ public class SaveLoadManager {
         try {
             @SuppressWarnings("unchecked")
             Map<String, Object> data = mapper.readValue(
-                new File(SAVE_DIR + File.separator + slotFilename(slot)), Map.class);
+                slotFile(slot), Map.class);
             @SuppressWarnings("unchecked")
             Map<String, Object> p = (Map<String, Object>) data.get("player");
             return "Lv." + p.get("level") + " " + p.get("name")
@@ -301,13 +312,17 @@ public class SaveLoadManager {
 
     public boolean deleteSlot(int slot) {
         if (!validSlot(slot)) return false;
-        File f = new File(SAVE_DIR + File.separator + slotFilename(slot));
+        File f = slotFile(slot);
         if (f.exists()) return f.delete();
         return false;
     }
 
     private String slotFilename(int slot) {
         return slot == 0 ? "autosave.json" : "save_slot_" + slot + ".json";
+    }
+
+    private File slotFile(int slot) {
+        return new File(saveDir, slotFilename(slot));
     }
 
     private boolean validSlot(int slot) {

@@ -33,8 +33,10 @@ class ChapterOneProgressTest {
         for (int i = 0; i < 3; i++) progress.recordForestDefeat(true, false);
         progress.turnInRoadQuest();
 
+        assertTrue(progress.canEnterCrypt());
         assertFalse(progress.canEnterBossArena());
         assertTrue(progress.recoverCryptRelic());
+        assertTrue(progress.canEnterCrypt());
         assertTrue(progress.canEnterBossArena());
         assertFalse(progress.completeChapter());
         assertTrue(progress.defeatMalachar());
