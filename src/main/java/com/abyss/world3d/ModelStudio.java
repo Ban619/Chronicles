@@ -223,7 +223,8 @@ public final class ModelStudio {
                 event.consume();
             } else if (event.getCode() == javafx.scene.input.KeyCode.F
                     && !(scene.getFocusOwner() instanceof TextField)) {
-                frameAll();
+                if (event.isShiftDown()) frameAll();
+                else frameSelected();
                 event.consume();
             } else if (!(scene.getFocusOwner() instanceof TextField)
                     && (event.getCode() == javafx.scene.input.KeyCode.G
@@ -319,9 +320,12 @@ public final class ModelStudio {
         showInspector.setOnAction(event -> setInspectorOpen(true));
         MenuItem showToolbox = new MenuItem("Toggle Create / Assets shelf");
         showToolbox.setOnAction(event -> toggleToolbox());
-        MenuItem frameAll = new MenuItem("Frame all components (F)");
+        MenuItem frameAll = new MenuItem("Frame all components (Shift+F)");
         frameAll.setOnAction(event -> frameAll());
-        view.getItems().addAll(expand, showInspector, showToolbox, new SeparatorMenuItem(), frameAll);
+        MenuItem frameSelection = new MenuItem("Frame selected components (Shift+F)");
+        frameSelection.setOnAction(event -> frameSelected());
+        view.getItems().addAll(expand, showInspector, showToolbox,
+                new SeparatorMenuItem(), frameSelection, frameAll);
 
         Menu render = new Menu("Render");
         MenuItem refreshPreview = new MenuItem("Refresh model preview");
@@ -957,9 +961,12 @@ public final class ModelStudio {
             pitch.setAngle(-18);
             frameAll();
         });
-        Button frameButton = new Button("Frame All");
-        frameButton.setTooltip(new javafx.scene.control.Tooltip("Fit every scene object in the viewport (F)."));
-        frameButton.setOnAction(event -> frameAll());
+        Button frameButton = new Button("Frame Selected");
+        frameButton.setTooltip(new javafx.scene.control.Tooltip("Fit selected scene objects in the viewport (F)."));
+        frameButton.setOnAction(event -> frameSelected());
+        Button frameAllButton = new Button("Frame All");
+        frameAllButton.setTooltip(new javafx.scene.control.Tooltip("Fit every scene object in the viewport (Shift+F)."));
+        frameAllButton.setOnAction(event -> frameAll());
         Button selectButton = new Button("Select");
         selectButton.setOnAction(event -> {
             boxSelectToggle.setSelected(false);
@@ -975,7 +982,8 @@ public final class ModelStudio {
         removeObject.setOnAction(event -> removeSelectedPart());
         MenuButton objectMenu = new MenuButton("Object");
         objectMenu.getItems().addAll(duplicateObject, removeObject);
-        HBox viewportHeader = new HBox(6, mode, viewButton, frameButton, selectButton, addButton, objectMenu);
+        HBox viewportHeader = new HBox(6, mode, viewButton, frameButton, frameAllButton,
+                selectButton, addButton, objectMenu);
         viewportHeader.setAlignment(Pos.CENTER_LEFT);
         viewportHeader.setPadding(new Insets(5, 10, 5, 10));
         viewportHeader.setStyle("-fx-background-color: #292f31ee; -fx-border-color: #454d4f;"
@@ -1429,6 +1437,51 @@ public final class ModelStudio {
         }
 
         Bounds bounds = partRoot.getBoundsInParent();
+        frameBounds(bounds);
+        statusLabel.setText("Framed all " + parts.size() + " scene object(s)");
+    }
+
+    private void frameSelected() {
+        List<CustomModelDefinition.Part> selected = selectedParts();
+        if (selected.isEmpty()) {
+            statusLabel.setText("Select one or more scene objects to frame");
+            return;
+        }
+
+        double minX = Double.POSITIVE_INFINITY;
+        double minY = Double.POSITIVE_INFINITY;
+        double minZ = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double maxY = Double.NEGATIVE_INFINITY;
+        double maxZ = Double.NEGATIVE_INFINITY;
+        for (CustomModelDefinition.Part part : selected) {
+            Node node = findPartNode(partRoot, part.id);
+            if (node == null) continue;
+            Bounds bounds = node.getBoundsInLocal();
+            for (int corner = 0; corner < 8; corner++) {
+                Point3D local = new Point3D(
+                        (corner & 1) == 0 ? bounds.getMinX() : bounds.getMaxX(),
+                        (corner & 2) == 0 ? bounds.getMinY() : bounds.getMaxY(),
+                        (corner & 4) == 0 ? bounds.getMinZ() : bounds.getMaxZ());
+                Point3D world = previewWorld.sceneToLocal(node.localToScene(local));
+                minX = Math.min(minX, world.getX());
+                minY = Math.min(minY, world.getY());
+                minZ = Math.min(minZ, world.getZ());
+                maxX = Math.max(maxX, world.getX());
+                maxY = Math.max(maxY, world.getY());
+                maxZ = Math.max(maxZ, world.getZ());
+            }
+        }
+        if (!Double.isFinite(minX) || !Double.isFinite(minY) || !Double.isFinite(minZ)) {
+            statusLabel.setText("Selected objects are not available in the viewport");
+            return;
+        }
+        frameBounds(new javafx.geometry.BoundingBox(minX, minY, minZ,
+                maxX - minX, maxY - minY, maxZ - minZ));
+        statusLabel.setText("Framed " + selected.size() + " selected component(s)");
+    }
+
+    private void frameBounds(Bounds bounds) {
         previewWorld.setTranslateX(-bounds.getCenterX());
         previewWorld.setTranslateY(-bounds.getCenterY());
         previewWorld.setTranslateZ(-bounds.getCenterZ());
@@ -1446,7 +1499,6 @@ public final class ModelStudio {
         previewCamera.setTranslateX(0);
         previewCamera.setTranslateY(0);
         previewCamera.setTranslateZ(-cameraDistance);
-        statusLabel.setText("Framed all " + parts.size() + " scene object(s)");
     }
 
     private Button axisButton(String axis, String color, double yawAngle, double pitchAngle) {
