@@ -676,27 +676,60 @@ public final class ModelStudio {
     private VBox buildInspector() {
         partList.setItems(parts);
         partList.setPrefWidth(230);
-        partList.setMinHeight(0);
+        partList.setMinHeight(70);
+        partList.setStyle("-fx-control-inner-background: #171e20;"
+                + "-fx-background-color: #171e20;"
+                + "-fx-text-fill: #e4e9e5;"
+                + "-fx-selection-bar: #078db8;"
+                + "-fx-selection-bar-non-focused: #36545d;"
+                + "-fx-focus-color: #168eb5;"
+                + "-fx-faint-focus-color: transparent;");
         partList.setCellFactory(list -> new ListCell<>() {
             @Override
             protected void updateItem(CustomModelDefinition.Part item, boolean empty) {
                 super.updateItem(item, empty);
                 setText(empty || item == null ? null : item.name + "  ·  " + item.shape);
+                setStyle("-fx-text-fill: #e4e9e5;");
             }
         });
         partList.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> showPart(selected));
 
-        Button remove = new Button("Remove selected part");
-        remove.setMaxWidth(Double.MAX_VALUE);
+        Button remove = new Button("Remove");
         remove.setOnAction(event -> removeSelectedPart());
         Button duplicate = new Button("Duplicate");
+        duplicate.setTooltip(new javafx.scene.control.Tooltip("Duplicate selected scene object"));
         duplicate.setOnAction(event -> duplicateSelectedPart());
         Button moveUp = new Button("Move up");
+        moveUp.setTooltip(new javafx.scene.control.Tooltip("Move selected object up in draw order"));
         moveUp.setOnAction(event -> moveSelectedPart(-1));
         Button moveDown = new Button("Move down");
+        moveDown.setTooltip(new javafx.scene.control.Tooltip("Move selected object down in draw order"));
         moveDown.setOnAction(event -> moveSelectedPart(1));
-        FlowPane hierarchyActions = new FlowPane(6, 5, duplicate, moveUp, moveDown);
+        remove.setTooltip(new javafx.scene.control.Tooltip("Remove selected scene object"));
+        GridPane hierarchyActions = new GridPane();
+        hierarchyActions.setHgap(6);
+        hierarchyActions.setVgap(6);
         hierarchyActions.setMinHeight(0);
+        hierarchyActions.setMaxWidth(Double.MAX_VALUE);
+        Button[][] hierarchyButtons = {{duplicate, moveUp}, {moveDown, remove}};
+        for (int row = 0; row < hierarchyButtons.length; row++) {
+            for (int column = 0; column < hierarchyButtons[row].length; column++) {
+                Button button = hierarchyButtons[row][column];
+                button.setMaxWidth(Double.MAX_VALUE);
+                button.setMinWidth(0);
+                button.setStyle("-fx-background-color: #394245; -fx-text-fill: #e2e7e3;"
+                        + "-fx-border-color: #586365; -fx-padding: 5 7 5 7;");
+                GridPane.setHgrow(button, Priority.ALWAYS);
+                hierarchyActions.add(button, column, row);
+            }
+        }
+        for (int column = 0; column < 2; column++) {
+            ColumnConstraints constraints = new ColumnConstraints();
+            constraints.setPercentWidth(50);
+            constraints.setHgrow(Priority.ALWAYS);
+            constraints.setMinWidth(0);
+            hierarchyActions.getColumnConstraints().add(constraints);
+        }
 
         GridPane transformGrid = new GridPane();
         transformGrid.setHgap(7);
@@ -811,9 +844,9 @@ public final class ModelStudio {
         partsLabel.setStyle("-fx-text-fill: #d7dfd9; -fx-font-weight: bold;");
         Label transformLabel = new Label("SELECTED COMPONENT");
         Label surfaceLabel = new Label("SURFACE MATERIAL");
-        VBox hierarchy = new VBox(8, partsLabel, partList, hierarchyActions, remove);
+        VBox hierarchy = new VBox(8, partsLabel, partList, hierarchyActions);
         hierarchy.setPadding(new Insets(12));
-        hierarchy.setMinSize(0, 0);
+        hierarchy.setMinSize(0, 190);
         hierarchy.setStyle("-fx-background-color: #202729; -fx-border-color: #343d3e; -fx-border-width: 0 0 1 0;");
         VBox.setVgrow(partList, Priority.ALWAYS);
 
