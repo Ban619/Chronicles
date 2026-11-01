@@ -1561,7 +1561,25 @@ public final class ModelStudio {
                 + "-fx-focus-color: #168eb5;"
                 + "-fx-faint-focus-color: transparent;");
         partList.setCellFactory(tree -> new TreeCell<>() {
+            private final Button visibilityButton = new Button();
+            private final Label rowLabel = new Label();
+            private final HBox rowContent = new HBox(6, visibilityButton, rowLabel);
+
             {
+                visibilityButton.setFocusTraversable(false);
+                visibilityButton.setMinWidth(24);
+                visibilityButton.setPrefWidth(24);
+                visibilityButton.setMaxWidth(24);
+                visibilityButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #cbd4ce;"
+                        + "-fx-padding: 0 2 0 2;");
+                rowContent.setAlignment(Pos.CENTER_LEFT);
+                rowLabel.setMaxWidth(Double.MAX_VALUE);
+                HBox.setHgrow(rowLabel, Priority.ALWAYS);
+                visibilityButton.setOnAction(event -> {
+                    CustomModelDefinition.Part part = getItem();
+                    if (part != null) togglePartVisibility(part);
+                    event.consume();
+                });
                 setOnDragDetected(event -> {
                     CustomModelDefinition.Part part = getItem();
                     if (part == null) return;
@@ -1602,9 +1620,21 @@ public final class ModelStudio {
             @Override
             protected void updateItem(CustomModelDefinition.Part item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null
-                        : (isEffectivelyVisible(item) ? "◉  " : "◌  ")
-                                + item.name + "  ·  " + item.shape);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    boolean visible = isEffectivelyVisible(item);
+                    visibilityButton.setText(visible ? "◉" : "○");
+                    visibilityButton.setTooltip(new javafx.scene.control.Tooltip(
+                            visible ? "Hide this component and its children"
+                                    : "Reveal this component"));
+                    visibilityButton.setAccessibleText(visible
+                            ? "Hide " + item.name : "Reveal " + item.name);
+                    rowLabel.setText(item.name + "  ·  " + item.shape);
+                    setText(null);
+                    setGraphic(rowContent);
+                }
                 updateCellStyle();
             }
 
@@ -1612,6 +1642,9 @@ public final class ModelStudio {
                 setStyle(isSelected()
                         ? "-fx-background-color: #078db8; -fx-text-fill: #ffffff;"
                         : "-fx-background-color: #202729; -fx-text-fill: #e4e9e5;");
+                rowLabel.setStyle(isSelected()
+                        ? "-fx-text-fill: #ffffff;"
+                        : "-fx-text-fill: #e4e9e5;");
             }
         });
         partList.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> {
@@ -2007,6 +2040,23 @@ public final class ModelStudio {
         statusLabel.setText(hide
                 ? "Hid " + roots.size() + " selected component(s)"
                 : "Revealed " + roots.size() + " selected component(s)");
+    }
+
+    private void togglePartVisibility(CustomModelDefinition.Part part) {
+        boolean hide = isEffectivelyVisible(part);
+        if (hide) {
+            hiddenPartIds.add(part.id);
+        } else {
+            CustomModelDefinition.Part current = part;
+            Set<String> visited = new java.util.HashSet<>();
+            while (current != null && visited.add(current.id)) {
+                hiddenPartIds.remove(current.id);
+                current = current.parentId == null ? null : findPart(current.parentId);
+            }
+        }
+        refreshPartVisibility();
+        partList.refresh();
+        statusLabel.setText(hide ? "Hidden " + part.name : "Revealed " + part.name);
     }
 
     private void showAllComponents() {
