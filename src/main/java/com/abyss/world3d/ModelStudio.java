@@ -112,6 +112,7 @@ public final class ModelStudio {
     private final ObservableList<CustomModelDefinition.Part> parts = FXCollections.observableArrayList();
     private final Deque<EditorSnapshot> undoHistory = new ArrayDeque<>();
     private final Deque<EditorSnapshot> redoHistory = new ArrayDeque<>();
+    private final Set<String> hiddenPartIds = new java.util.HashSet<>();
     private final MenuItem undoMenuItem = new MenuItem("Undo");
     private final MenuItem redoMenuItem = new MenuItem("Redo");
     private final Rotate yaw = new Rotate(-25, Rotate.Y_AXIS);
@@ -324,8 +325,13 @@ public final class ModelStudio {
         frameAll.setOnAction(event -> frameAll());
         MenuItem frameSelection = new MenuItem("Frame selected components (Shift+F)");
         frameSelection.setOnAction(event -> frameSelected());
+        MenuItem hideSelection = new MenuItem("Hide selected components");
+        hideSelection.setOnAction(event -> toggleSelectedVisibility());
+        MenuItem showHidden = new MenuItem("Show all hidden components");
+        showHidden.setOnAction(event -> showAllComponents());
         view.getItems().addAll(expand, showInspector, showToolbox,
-                new SeparatorMenuItem(), frameSelection, frameAll);
+                new SeparatorMenuItem(), frameSelection, frameAll,
+                new SeparatorMenuItem(), hideSelection, showHidden);
 
         Menu render = new Menu("Render");
         MenuItem refreshPreview = new MenuItem("Refresh model preview");
@@ -1085,6 +1091,7 @@ public final class ModelStudio {
         graphics.clearRect(0, 0, width, height);
         if (transformOperation == null || width <= 0 || height <= 0) return;
         CustomModelDefinition.Part active = selectedPart();
+        if (active == null || !isEffectivelyVisible(active)) return;
         Node partNode = active == null ? null : findPartNode(partRoot, active.id);
         if (partNode == null) return;
 
@@ -1135,7 +1142,8 @@ public final class ModelStudio {
 
     private boolean beginGizmoDrag(double x, double y) {
         CustomModelDefinition.Part active = selectedPart();
-        Node partNode = active == null ? null : findPartNode(partRoot, active.id);
+        Node partNode = active == null || !isEffectivelyVisible(active)
+                ? null : findPartNode(partRoot, active.id);
         if (partNode == null) return false;
         Point3D sceneOrigin = partNode.localToScene(Point3D.ZERO);
         Point3D localOrigin = previewRoot.sceneToLocal(sceneOrigin);
@@ -1436,25 +1444,41 @@ public final class ModelStudio {
             return;
         }
 
-        Bounds bounds = partRoot.getBoundsInParent();
+        Bounds bounds = visibleBounds(parts);
+        if (bounds == null) {
+            statusLabel.setText("Reveal at least one scene object before framing the model");
+            return;
+        }
         frameBounds(bounds);
-        statusLabel.setText("Framed all " + parts.size() + " scene object(s)");
+        statusLabel.setText("Framed visible scene objects");
     }
 
     private void frameSelected() {
-        List<CustomModelDefinition.Part> selected = selectedParts();
+        List<CustomModelDefinition.Part> selected = selectedParts().stream()
+                .filter(this::isEffectivelyVisible).toList();
         if (selected.isEmpty()) {
-            statusLabel.setText("Select one or more scene objects to frame");
+            statusLabel.setText("Select visible scene objects to frame");
             return;
         }
 
+        Bounds bounds = visibleBounds(selected);
+        if (bounds == null) {
+            statusLabel.setText("Selected objects are not available in the viewport");
+            return;
+        }
+        frameBounds(bounds);
+        statusLabel.setText("Framed " + selected.size() + " selected component(s)");
+    }
+
+    private Bounds visibleBounds(List<CustomModelDefinition.Part> candidates) {
         double minX = Double.POSITIVE_INFINITY;
         double minY = Double.POSITIVE_INFINITY;
         double minZ = Double.POSITIVE_INFINITY;
         double maxX = Double.NEGATIVE_INFINITY;
         double maxY = Double.NEGATIVE_INFINITY;
         double maxZ = Double.NEGATIVE_INFINITY;
-        for (CustomModelDefinition.Part part : selected) {
+        for (CustomModelDefinition.Part part : candidates) {
+            if (!isEffectivelyVisible(part)) continue;
             Node node = findPartNode(partRoot, part.id);
             if (node == null) continue;
             Bounds bounds = node.getBoundsInLocal();
@@ -1473,12 +1497,20 @@ public final class ModelStudio {
             }
         }
         if (!Double.isFinite(minX) || !Double.isFinite(minY) || !Double.isFinite(minZ)) {
-            statusLabel.setText("Selected objects are not available in the viewport");
-            return;
+            return null;
         }
-        frameBounds(new javafx.geometry.BoundingBox(minX, minY, minZ,
-                maxX - minX, maxY - minY, maxZ - minZ));
-        statusLabel.setText("Framed " + selected.size() + " selected component(s)");
+        return new javafx.geometry.BoundingBox(minX, minY, minZ,
+                maxX - minX, maxY - minY, maxZ - minZ);
+    }
+
+    private boolean isEffectivelyVisible(CustomModelDefinition.Part part) {
+        CustomModelDefinition.Part current = part;
+        Set<String> visited = new java.util.HashSet<>();
+        while (current != null && visited.add(current.id)) {
+            if (hiddenPartIds.contains(current.id)) return false;
+            current = current.parentId == null ? null : findPart(current.parentId);
+        }
+        return true;
     }
 
     private void frameBounds(Bounds bounds) {
@@ -1570,7 +1602,9 @@ public final class ModelStudio {
             @Override
             protected void updateItem(CustomModelDefinition.Part item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null : item.name + "  ·  " + item.shape);
+                setText(empty || item == null ? null
+                        : (isEffectivelyVisible(item) ? "◉  " : "◌  ")
+                                + item.name + "  ·  " + item.shape);
                 updateCellStyle();
             }
 
@@ -1605,6 +1639,12 @@ public final class ModelStudio {
         moveDown.setTooltip(new javafx.scene.control.Tooltip("Move selected object down in draw order"));
         moveDown.setOnAction(event -> moveSelectedPart(1));
         remove.setTooltip(new javafx.scene.control.Tooltip("Remove selected scene object"));
+        Button hide = new Button("Hide/Show");
+        hide.setTooltip(new javafx.scene.control.Tooltip("Toggle visibility of selected objects in the viewport"));
+        hide.setOnAction(event -> toggleSelectedVisibility());
+        Button showAll = new Button("Show All");
+        showAll.setTooltip(new javafx.scene.control.Tooltip("Reveal every hidden scene object"));
+        showAll.setOnAction(event -> showAllComponents());
         duplicate.setText("Dup");
         moveUp.setText("Up");
         moveDown.setText("Down");
@@ -1614,28 +1654,32 @@ public final class ModelStudio {
         hierarchyActions.setVgap(6);
         hierarchyActions.setMinHeight(0);
         hierarchyActions.setMaxWidth(Double.MAX_VALUE);
-        Button[] hierarchyButtons = {duplicate, moveUp, moveDown, remove};
-        for (int column = 0; column < hierarchyButtons.length; column++) {
-            Button button = hierarchyButtons[column];
+        Button[] hierarchyButtons = {duplicate, moveUp, moveDown, hide, showAll, remove};
+        for (int index = 0; index < hierarchyButtons.length; index++) {
+            int column = index % 3;
+            int row = index / 3;
+            Button button = hierarchyButtons[index];
             button.setMaxWidth(Double.MAX_VALUE);
             button.setMinWidth(0);
             button.setStyle("-fx-background-color: #394245; -fx-text-fill: #e2e7e3;"
                     + "-fx-border-color: #586365; -fx-padding: 4 5 4 5;");
             GridPane.setHgrow(button, Priority.ALWAYS);
-            hierarchyActions.add(button, column, 0);
+            hierarchyActions.add(button, column, row);
         }
-        for (int column = 0; column < 4; column++) {
+        for (int column = 0; column < 3; column++) {
             ColumnConstraints constraints = new ColumnConstraints();
-            constraints.setPercentWidth(25);
+            constraints.setPercentWidth(100.0 / 3);
             constraints.setHgrow(Priority.ALWAYS);
             constraints.setMinWidth(0);
             hierarchyActions.getColumnConstraints().add(constraints);
         }
-        RowConstraints actionRow = new RowConstraints();
-        actionRow.setMinHeight(26);
-        actionRow.setPrefHeight(26);
-        actionRow.setMaxHeight(26);
-        hierarchyActions.getRowConstraints().add(actionRow);
+        for (int row = 0; row < 2; row++) {
+            RowConstraints actionRow = new RowConstraints();
+            actionRow.setMinHeight(26);
+            actionRow.setPrefHeight(26);
+            actionRow.setMaxHeight(26);
+            hierarchyActions.getRowConstraints().add(actionRow);
+        }
 
         GridPane transformGrid = new GridPane();
         transformGrid.setHgap(7);
@@ -1938,6 +1982,52 @@ public final class ModelStudio {
         });
     }
 
+    private void toggleSelectedVisibility() {
+        List<CustomModelDefinition.Part> selected = selectedParts();
+        if (selected.isEmpty()) {
+            statusLabel.setText("Select one or more scene objects first");
+            return;
+        }
+        List<CustomModelDefinition.Part> roots = selectedRoots();
+        boolean hide = roots.stream().anyMatch(this::isEffectivelyVisible);
+        for (CustomModelDefinition.Part part : roots) {
+            if (hide) {
+                hiddenPartIds.add(part.id);
+            } else {
+                CustomModelDefinition.Part current = part;
+                Set<String> visited = new java.util.HashSet<>();
+                while (current != null && visited.add(current.id)) {
+                    hiddenPartIds.remove(current.id);
+                    current = current.parentId == null ? null : findPart(current.parentId);
+                }
+            }
+        }
+        refreshPartVisibility();
+        refreshPartList(selectedPartIndex());
+        statusLabel.setText(hide
+                ? "Hid " + roots.size() + " selected component(s)"
+                : "Revealed " + roots.size() + " selected component(s)");
+    }
+
+    private void showAllComponents() {
+        if (hiddenPartIds.isEmpty()) {
+            statusLabel.setText("All scene objects are already visible");
+            return;
+        }
+        hiddenPartIds.clear();
+        refreshPartVisibility();
+        refreshPartList(selectedPartIndex());
+        statusLabel.setText("All scene objects are visible");
+    }
+
+    private void refreshPartVisibility() {
+        for (CustomModelDefinition.Part part : parts) {
+            Node node = findPartNode(partRoot, part.id);
+            if (node != null) node.setVisible(!hiddenPartIds.contains(part.id));
+        }
+        drawTransformGizmo();
+    }
+
     private List<CustomModelDefinition.Part> selectedParts() {
         Set<CustomModelDefinition.Part> selected = partList.getSelectionModel().getSelectedItems().stream()
                 .map(TreeItem::getValue)
@@ -1975,6 +2065,7 @@ public final class ModelStudio {
 
         CustomModelDefinition.Part lastSelected = null;
         for (CustomModelDefinition.Part part : parts) {
+            if (!isEffectivelyVisible(part)) continue;
             Node partNode = findPartNode(partRoot, part.id);
             ProjectedBounds bounds = partNode == null ? null : projectBounds(partNode);
             if (bounds != null && bounds.intersects(minX, minY, maxX, maxY)) {
@@ -2324,6 +2415,10 @@ public final class ModelStudio {
         List<Node> rootNodes = List.copyOf(hierarchy.getChildren());
         hierarchy.getChildren().clear();
         partRoot.getChildren().setAll(rootNodes);
+        Set<String> currentIds = parts.stream().map(part -> part.id)
+                .collect(java.util.stream.Collectors.toSet());
+        hiddenPartIds.retainAll(currentIds);
+        refreshPartVisibility();
         drawTransformGizmo();
     }
 
