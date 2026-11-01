@@ -115,6 +115,7 @@ public final class ModelStudio {
     private final Deque<EditorSnapshot> undoHistory = new ArrayDeque<>();
     private final Deque<EditorSnapshot> redoHistory = new ArrayDeque<>();
     private final Set<String> hiddenPartIds = new java.util.HashSet<>();
+    private final Set<String> expandedPartIds = new java.util.HashSet<>();
     private final MenuItem undoMenuItem = new MenuItem("Undo");
     private final MenuItem redoMenuItem = new MenuItem("Redo");
     private final Rotate yaw = new Rotate(-25, Rotate.Y_AXIS);
@@ -129,6 +130,7 @@ public final class ModelStudio {
     private boolean syncingInspector;
     private boolean restoringHistory;
     private boolean rebuildingPartTree;
+    private boolean partTreeInitialized;
     private boolean viewportOnly;
     private boolean boxSelecting;
     private boolean boxSelectionAdditive;
@@ -1718,6 +1720,12 @@ public final class ModelStudio {
         Button selectPeers = new Button("Peers");
         selectPeers.setTooltip(new javafx.scene.control.Tooltip("Select the active component and its visible siblings"));
         selectPeers.setOnAction(event -> selectRelatedHierarchy(HierarchySelection.SIBLINGS));
+        Button expandAll = new Button("Expand");
+        expandAll.setTooltip(new javafx.scene.control.Tooltip("Expand every Outliner branch"));
+        expandAll.setOnAction(event -> setTreeExpanded(partList.getRoot(), true));
+        Button collapseAll = new Button("Collapse");
+        collapseAll.setTooltip(new javafx.scene.control.Tooltip("Collapse every Outliner branch"));
+        collapseAll.setOnAction(event -> setTreeExpanded(partList.getRoot(), false));
         duplicate.setText("Dup");
         moveUp.setText("Up");
         moveDown.setText("Down");
@@ -1729,7 +1737,7 @@ public final class ModelStudio {
         hierarchyActions.setMaxWidth(Double.MAX_VALUE);
         Button[] hierarchyButtons = {
                 duplicate, moveUp, moveDown, hide, showAll, remove,
-                selectParent, selectDescendants, selectPeers
+                selectParent, selectDescendants, selectPeers, expandAll, collapseAll
         };
         for (int index = 0; index < hierarchyButtons.length; index++) {
             int column = index % 3;
@@ -1749,7 +1757,7 @@ public final class ModelStudio {
             constraints.setMinWidth(0);
             hierarchyActions.getColumnConstraints().add(constraints);
         }
-        for (int row = 0; row < 3; row++) {
+        for (int row = 0; row < 4; row++) {
             RowConstraints actionRow = new RowConstraints();
             actionRow.setMinHeight(26);
             actionRow.setPrefHeight(26);
@@ -2511,6 +2519,18 @@ public final class ModelStudio {
         for (TreeItem<CustomModelDefinition.Part> child : item.getChildren()) expandTree(child);
     }
 
+    private void setTreeExpanded(TreeItem<CustomModelDefinition.Part> item, boolean expanded) {
+        if (item == null) return;
+        if (item.getValue() != null) {
+            if (expanded) expandedPartIds.add(item.getValue().id);
+            else expandedPartIds.remove(item.getValue().id);
+        }
+        item.setExpanded(item.getValue() == null || expanded);
+        for (TreeItem<CustomModelDefinition.Part> child : item.getChildren()) {
+            setTreeExpanded(child, expanded);
+        }
+    }
+
     private enum TransformOperation { MOVE, ROTATE, SCALE }
 
     private enum HierarchySelection { PARENT, DESCENDANTS, SIBLINGS }
@@ -2559,7 +2579,13 @@ public final class ModelStudio {
                 ? "" : hierarchySearch.getText().trim().toLowerCase(java.util.Locale.ROOT);
         for (CustomModelDefinition.Part part : parts) {
             if (query.isEmpty() || matchesPartOrDescendant(part, query)) {
-                items.put(part.id, new TreeItem<>(part));
+                TreeItem<CustomModelDefinition.Part> item = new TreeItem<>(part);
+                item.expandedProperty().addListener((obs, wasExpanded, isExpanded) -> {
+                    if (rebuildingPartTree) return;
+                    if (isExpanded) expandedPartIds.add(part.id);
+                    else expandedPartIds.remove(part.id);
+                });
+                items.put(part.id, item);
             }
         }
         for (CustomModelDefinition.Part part : parts) {
@@ -2568,7 +2594,21 @@ public final class ModelStudio {
             TreeItem<CustomModelDefinition.Part> parent = items.get(part.parentId);
             (parent == null ? rootItem : parent).getChildren().add(item);
         }
-        expandTree(rootItem);
+        if (!partTreeInitialized) {
+            expandTree(rootItem);
+            for (CustomModelDefinition.Part part : parts) {
+                TreeItem<CustomModelDefinition.Part> item = items.get(part.id);
+                if (item != null && item.isExpanded()) expandedPartIds.add(part.id);
+            }
+        } else if (query.isEmpty()) {
+            for (CustomModelDefinition.Part part : parts) {
+                TreeItem<CustomModelDefinition.Part> item = items.get(part.id);
+                if (item != null) item.setExpanded(expandedPartIds.contains(part.id));
+            }
+        } else {
+            expandTree(rootItem);
+        }
+        partTreeInitialized = true;
         partList.getSelectionModel().clearSelection();
         partList.setRoot(rootItem);
         TreeItem<CustomModelDefinition.Part> selected = items.get(selectedId);
