@@ -129,6 +129,7 @@ public final class ModelStudio {
     private boolean rebuildingPartTree;
     private boolean viewportOnly;
     private boolean boxSelecting;
+    private boolean boxSelectionAdditive;
     private boolean viewportNavigationDragging;
     private boolean panningViewport;
     private boolean gizmoDragging;
@@ -840,6 +841,7 @@ public final class ModelStudio {
             } else if (event.getButton() == MouseButton.PRIMARY && boxSelectToggle.isSelected()
                     && !brushToggle.isSelected()) {
                 boxSelecting = true;
+                boxSelectionAdditive = event.isShiftDown();
                 selectionStartX = event.getX();
                 selectionStartY = event.getY();
                 updateSelectionMarquee(selectionStartX, selectionStartY);
@@ -891,7 +893,8 @@ public final class ModelStudio {
             double endY = event.getY();
             selectionMarquee.setVisible(false);
             if (Math.hypot(endX - selectionStartX, endY - selectionStartY) > 4) {
-                selectPartsInRectangle(selectionStartX, selectionStartY, endX, endY);
+                selectPartsInRectangle(selectionStartX, selectionStartY, endX, endY,
+                        boxSelectionAdditive);
             }
             event.consume();
         });
@@ -914,7 +917,7 @@ public final class ModelStudio {
         selectionMarquee.setVisible(false);
         Button selectTool = new Button("Select");
         selectTool.setTooltip(new javafx.scene.control.Tooltip(
-                "Click to select one scene object; Shift-click to add or toggle it in the selection."));
+                "Click to select one object or Shift-click to add/toggle it. In Box mode, Shift-drag adds objects."));
         selectTool.setMaxWidth(Double.MAX_VALUE);
         selectTool.setOnAction(event -> {
             boxSelectToggle.setSelected(false);
@@ -922,7 +925,7 @@ public final class ModelStudio {
             statusLabel.setText("Select tool active · click an object or drag to orbit");
         });
         boxSelectToggle.setTooltip(new javafx.scene.control.Tooltip(
-                "Drag a rectangle to select every part it touches, including parts behind other parts."));
+                "Drag a rectangle to select parts it touches, including occluded parts; Shift-drag adds to the selection."));
         boxSelectToggle.setOnAction(event -> {
             if (boxSelectToggle.isSelected() && brushToggle.isSelected()) {
                 brushToggle.setSelected(false);
@@ -1054,7 +1057,7 @@ public final class ModelStudio {
             event.consume();
         });
 
-        Label hint = new Label("Shift-click to add/toggle selection · Middle-drag to orbit · Shift+middle-drag to pan");
+        Label hint = new Label("Shift-click or Shift+box-drag to add selection · Middle-drag to orbit · Shift+middle-drag to pan");
         hint.setStyle("-fx-text-fill: #a7b0a8; -fx-background-color: #171e20cc; -fx-padding: 8 12 8 12;");
         inspectorRevealButton.setOnAction(event -> revealInspector());
         inspectorRevealButton.setStyle("-fx-text-fill: #e4d9bf; -fx-background-color: #202729; -fx-border-color: #6f7d74; -fx-padding: 8 12 8 12;");
@@ -2115,12 +2118,13 @@ public final class ModelStudio {
         selectionMarquee.setVisible(true);
     }
 
-    private void selectPartsInRectangle(double startX, double startY, double endX, double endY) {
+    private void selectPartsInRectangle(double startX, double startY, double endX, double endY,
+                                        boolean additive) {
         double minX = Math.min(startX, endX);
         double minY = Math.min(startY, endY);
         double maxX = Math.max(startX, endX);
         double maxY = Math.max(startY, endY);
-        partList.getSelectionModel().clearSelection();
+        if (!additive) partList.getSelectionModel().clearSelection();
 
         CustomModelDefinition.Part lastSelected = null;
         for (CustomModelDefinition.Part part : parts) {
@@ -2136,13 +2140,19 @@ public final class ModelStudio {
             }
         }
 
-        if (lastSelected == null) {
-            statusLabel.setText("Box select found no parts");
-        } else {
+        List<TreeItem<CustomModelDefinition.Part>> selectedItems =
+                partList.getSelectionModel().getSelectedItems();
+        if (lastSelected != null) {
             showPart(lastSelected);
-            statusLabel.setText("Selected " + partList.getSelectionModel().getSelectedItems().size()
+            statusLabel.setText("Selected " + selectedItems.size()
                     + " part(s), including parts behind others");
+        } else if (!selectedItems.isEmpty()) {
+            statusLabel.setText("Box select found no new parts; selection unchanged");
+        } else {
+            selectedPartId = null;
+            statusLabel.setText("Box select found no parts");
         }
+        drawTransformGizmo();
     }
 
     private void selectPartFromNode(Node pickedNode, boolean additive) {
