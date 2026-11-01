@@ -92,8 +92,8 @@ public final class ModelStudio {
     private final ComboBox<String> shapePicker = new ComboBox<>();
     private final ComboBox<String> materialPicker = new ComboBox<>();
     private final ComboBox<String> finishPicker = new ComboBox<>();
-    private final ToggleButton brushToggle = new ToggleButton("Paint brush: off");
-    private final ToggleButton boxSelectToggle = new ToggleButton("Box select: off");
+    private final ToggleButton brushToggle = new ToggleButton("Brush");
+    private final ToggleButton boxSelectToggle = new ToggleButton("Box");
     private final Button inspectorOpenButton = new Button("Component Inspector");
     private final Button viewportModeButton = new Button("Expand viewport");
     private final Button inspectorRevealButton = new Button("Open Component Inspector");
@@ -121,9 +121,9 @@ public final class ModelStudio {
     private boolean viewportOnly;
     private boolean boxSelecting;
     private boolean inspectorOpen = true;
-    private double toolboxDividerPosition = 0.17;
-    private double inspectorDividerPosition = 0.78;
-    private double explorerDividerPosition = 0.43;
+    private double toolboxDividerPosition = 0.14;
+    private double inspectorDividerPosition = 0.79;
+    private double explorerDividerPosition = 0.29;
     private double dragStartX;
     private double dragStartY;
     private SubScene preview;
@@ -171,7 +171,7 @@ public final class ModelStudio {
         viewport = buildViewport();
         inspector = buildInspector();
         workspace = new javafx.scene.control.SplitPane(toolbox, viewport, inspector);
-        workspace.setDividerPositions(0.21, 0.79);
+        workspace.setDividerPositions(toolboxDividerPosition, inspectorDividerPosition);
         workspace.setMinSize(0, 0);
         root.setCenter(workspace);
         root.setBottom(statusLabel);
@@ -258,7 +258,7 @@ public final class ModelStudio {
         Label title = new Label("ABYSS STUDIO");
         title.setStyle("-fx-text-fill: #e4d9bf; -fx-font-size: 13px; -fx-font-weight: bold;");
         modelName.setPromptText("Model name");
-        modelName.setPrefColumnCount(16);
+        modelName.setPrefColumnCount(13);
         ToggleGroup tabs = new ToggleGroup();
         HBox tabRow = new HBox(2);
         for (String tab : List.of("Home", "Model", "Materials", "Assets")) {
@@ -276,16 +276,16 @@ public final class ModelStudio {
         inspectorOpenButton.setTooltip(new javafx.scene.control.Tooltip("Open the Component Inspector dock"));
         inspectorOpenButton.setOnAction(event -> setInspectorOpen(true));
         viewportModeButton.setOnAction(event -> toggleViewportOnly(viewportModeButton));
-        HBox identity = new HBox(10, title, modelName);
+        HBox identity = new HBox(10, title, modelName, tabRow);
         identity.setAlignment(Pos.CENTER_LEFT);
-        identity.setPadding(new Insets(6, 12, 6, 12));
+        identity.setPadding(new Insets(4, 10, 4, 10));
         HBox context = new HBox(8, inspectorOpenButton, viewportModeButton);
         context.setAlignment(Pos.CENTER_RIGHT);
         HBox.setHgrow(ribbonCommands, Priority.ALWAYS);
         HBox toolRow = new HBox(10, ribbonCommands, context);
         toolRow.setAlignment(Pos.CENTER_LEFT);
-        toolRow.setPadding(new Insets(7, 12, 8, 12));
-        VBox ribbon = new VBox(tabRow, new Separator(), identity, toolRow);
+        toolRow.setPadding(new Insets(5, 10, 6, 10));
+        VBox ribbon = new VBox(identity, new Separator(), toolRow);
         ribbon.setStyle("-fx-background-color: #293033; -fx-border-color: #414b4d; -fx-border-width: 0 0 1 0;");
         return ribbon;
     }
@@ -304,7 +304,7 @@ public final class ModelStudio {
             }
             case "Materials" -> ribbonCommands.getChildren().addAll(
                     new Label("Preset"), materialPicker, new Label("Finish"), finishPicker,
-                    new Label("Color"), colorPicker, brushToggle);
+                    new Label("Color"), colorPicker);
             case "Assets" -> {
                 Button importButton = new Button("Import component");
                 importButton.setOnAction(event -> importComponent());
@@ -429,7 +429,7 @@ public final class ModelStudio {
         VBox.setVgrow(templateList, Priority.ALWAYS);
 
         VBox pane = new VBox(createDock, assetDock);
-        pane.setPrefWidth(280);
+        pane.setPrefWidth(195);
         pane.setMinWidth(0);
         pane.setStyle("-fx-background-color: #202729; -fx-border-color: #343d3e; -fx-border-width: 0 1 0 0;");
         VBox.setVgrow(assetDock, Priority.ALWAYS);
@@ -688,18 +688,42 @@ public final class ModelStudio {
         selectionMarquee.setMouseTransparent(true);
         selectionMarquee.setManaged(false);
         selectionMarquee.setVisible(false);
+        Button selectTool = new Button("Select");
+        selectTool.setTooltip(new javafx.scene.control.Tooltip("Select one scene object by clicking it."));
+        selectTool.setMaxWidth(Double.MAX_VALUE);
+        selectTool.setOnAction(event -> {
+            boxSelectToggle.setSelected(false);
+            brushToggle.setSelected(false);
+            statusLabel.setText("Select tool active · click an object or drag to orbit");
+        });
         boxSelectToggle.setTooltip(new javafx.scene.control.Tooltip(
                 "Drag a rectangle to select every part it touches, including parts behind other parts."));
         boxSelectToggle.setOnAction(event -> {
-            boxSelectToggle.setText(boxSelectToggle.isSelected() ? "Box select: on" : "Box select: off");
             if (boxSelectToggle.isSelected() && brushToggle.isSelected()) {
                 brushToggle.setSelected(false);
-                brushToggle.setText("Paint brush: off");
             }
             statusLabel.setText(boxSelectToggle.isSelected()
                     ? "Box select active · drag a rectangle across the viewport"
                     : "Box select disabled · drag viewport to orbit");
         });
+        brushToggle.setTooltip(new javafx.scene.control.Tooltip("Paint the clicked part and nearby components."));
+        brushToggle.setOnAction(event -> {
+            if (brushToggle.isSelected() && boxSelectToggle.isSelected()) {
+                boxSelectToggle.setSelected(false);
+            }
+            statusLabel.setText(brushToggle.isSelected()
+                    ? "Brush active · click a model surface to paint nearby components"
+                    : "Brush disabled · click to select or drag to orbit");
+        });
+        for (ToggleButton tool : List.of(boxSelectToggle, brushToggle)) {
+            tool.setMaxWidth(Double.MAX_VALUE);
+        }
+        VBox toolShelf = new VBox(5, selectTool, boxSelectToggle, brushToggle);
+        toolShelf.setPrefWidth(74);
+        toolShelf.setMaxWidth(74);
+        toolShelf.setPadding(new Insets(8));
+        toolShelf.setStyle("-fx-background-color: #202729cc; -fx-border-color: #465153;"
+                + "-fx-border-width: 1; -fx-background-radius: 4; -fx-border-radius: 4;");
         viewportPane.setOnDragOver(event -> {
             if (event.getGestureSource() != viewportPane && event.getDragboard().hasString()) {
                 event.acceptTransferModes(TransferMode.COPY);
@@ -726,13 +750,13 @@ public final class ModelStudio {
         inspectorRevealButton.setStyle("-fx-text-fill: #e4d9bf; -fx-background-color: #202729; -fx-border-color: #6f7d74; -fx-padding: 8 12 8 12;");
         inspectorRevealButton.setVisible(false);
         inspectorRevealButton.setManaged(false);
-        viewportPane.getChildren().addAll(preview, selectionMarquee, hint, boxSelectToggle, inspectorRevealButton);
+        viewportPane.getChildren().addAll(preview, selectionMarquee, toolShelf, hint, inspectorRevealButton);
         viewportPane.setMinSize(0, 0);
         StackPane.setAlignment(hint, Pos.BOTTOM_LEFT);
         StackPane.setMargin(hint, new Insets(12));
         StackPane.setAlignment(selectionMarquee, Pos.TOP_LEFT);
-        StackPane.setAlignment(boxSelectToggle, Pos.TOP_LEFT);
-        StackPane.setMargin(boxSelectToggle, new Insets(12));
+        StackPane.setAlignment(toolShelf, Pos.CENTER_LEFT);
+        StackPane.setMargin(toolShelf, new Insets(12));
         StackPane.setAlignment(inspectorRevealButton, Pos.TOP_RIGHT);
         StackPane.setMargin(inspectorRevealButton, new Insets(12));
         return viewportPane;
@@ -924,16 +948,6 @@ public final class ModelStudio {
                 });
             }
         });
-        brushToggle.setOnAction(event -> {
-            brushToggle.setText(brushToggle.isSelected() ? "Paint brush: on" : "Paint brush: off");
-            if (brushToggle.isSelected() && boxSelectToggle.isSelected()) {
-                boxSelectToggle.setSelected(false);
-                boxSelectToggle.setText("Box select: off");
-            }
-            statusLabel.setText(brushToggle.isSelected()
-                    ? "Brush active · click a model surface to paint nearby components"
-                    : "Brush disabled · drag viewport to orbit");
-        });
         brushRadius.setShowTickMarks(true);
         brushRadius.setMajorTickUnit(20);
         brushRadius.valueProperty().addListener((obs, oldValue, newValue) ->
@@ -979,7 +993,7 @@ public final class ModelStudio {
         VBox inspectorContent = new VBox(9, transformLabel,
             new VBox(3, new Label("Component name"), partName), finishControls,
             new VBox(3, new Label("Semantic preset"), materialPicker),
-            new Label("Brush palette"), palette, brushToggle, brushRadiusLabel, brushRadius,
+            new Label("Brush palette"), palette, brushRadiusLabel, brushRadius,
             new Label("Base color / opacity"), colorPicker, transformGrid, apply,
             new Separator(), surfaceLabel,
             new Label("Preset sets a useful base color. Finish controls specular response."));
@@ -988,7 +1002,7 @@ public final class ModelStudio {
         properties.setFitToWidth(true);
         properties.setStyle("-fx-background: #202729; -fx-background-color: #202729;");
         inspectorContent.setStyle("-fx-background-color: #202729;");
-        Label dockTitle = new Label("EXPLORER");
+        Label dockTitle = new Label("OUTLINER");
         dockTitle.setStyle("-fx-text-fill: #e4d9bf; -fx-font-size: 11px; -fx-font-weight: bold;");
         Button closeInspector = new Button("×");
         closeInspector.setFocusTraversable(false);
@@ -1019,7 +1033,7 @@ public final class ModelStudio {
                 (obs, oldPosition, newPosition) -> explorerDividerPosition = newPosition.doubleValue());
 
         VBox inspectorPane = new VBox(dockTitleBar, explorerProperties);
-        inspectorPane.setPrefWidth(330);
+        inspectorPane.setPrefWidth(285);
         inspectorPane.setMinWidth(0);
         inspectorPane.setStyle("-fx-background-color: #202729; -fx-border-color: #343d3e; -fx-border-width: 0 0 0 1;");
         VBox.setVgrow(explorerProperties, Priority.ALWAYS);
