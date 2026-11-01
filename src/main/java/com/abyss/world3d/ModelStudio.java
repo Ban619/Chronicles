@@ -82,6 +82,7 @@ public final class ModelStudio {
     private final CustomModelDefinition definition = new CustomModelDefinition();
     private final BorderPane root = new BorderPane();
     private final Group previewRoot = new Group();
+    private final Group previewWorld = new Group();
     private final Group partRoot = new Group();
     private final TreeView<CustomModelDefinition.Part> partList = new TreeView<>();
     private final ListView<TemplateEntry> templateList = new ListView<>();
@@ -151,6 +152,7 @@ public final class ModelStudio {
         buildWindow();
         refreshPartList(0);
         refreshPreview();
+        frameAll();
     }
 
     public static void open(Perspective3DEngine engine) {
@@ -198,11 +200,15 @@ public final class ModelStudio {
             } else if (event.isControlDown() && event.getCode() == javafx.scene.input.KeyCode.O) {
                 openModel();
                 event.consume();
-                } else if (event.getCode() == javafx.scene.input.KeyCode.DELETE
+            } else if (event.getCode() == javafx.scene.input.KeyCode.F
+                    && !(scene.getFocusOwner() instanceof TextField)) {
+                frameAll();
+                event.consume();
+            } else if (event.getCode() == javafx.scene.input.KeyCode.DELETE
                     && !(scene.getFocusOwner() instanceof TextField)) {
                 removeSelectedPart();
                 event.consume();
-                } else if (event.isControlDown() && event.getCode() == javafx.scene.input.KeyCode.D
+            } else if (event.isControlDown() && event.getCode() == javafx.scene.input.KeyCode.D
                     && !(scene.getFocusOwner() instanceof TextField)) {
                 duplicateSelectedPart();
                 event.consume();
@@ -282,7 +288,9 @@ public final class ModelStudio {
         showInspector.setOnAction(event -> setInspectorOpen(true));
         MenuItem showToolbox = new MenuItem("Toggle Create / Assets shelf");
         showToolbox.setOnAction(event -> toggleToolbox());
-        view.getItems().addAll(expand, showInspector, showToolbox);
+        MenuItem frameAll = new MenuItem("Frame all components (F)");
+        frameAll.setOnAction(event -> frameAll());
+        view.getItems().addAll(expand, showInspector, showToolbox, new SeparatorMenuItem(), frameAll);
 
         Menu render = new Menu("Render");
         MenuItem refreshPreview = new MenuItem("Refresh model preview");
@@ -684,7 +692,7 @@ public final class ModelStudio {
 
     private StackPane buildViewport() {
         StackPane viewportPane = new StackPane();
-        Group world = new Group();
+        Group world = previewWorld;
         Box floor = new Box(180, 2, 180);
         floor.setTranslateY(1);
         floor.setMaterial(new PhongMaterial(Color.web("#313b37")));
@@ -763,7 +771,7 @@ public final class ModelStudio {
             else selectPartFromNode(pickedNode);
         });
         preview.setOnScroll(event -> {
-            cameraDistance = Math.max(90, Math.min(440, cameraDistance - event.getDeltaY() * 0.35));
+            cameraDistance = Math.max(10, Math.min(2500, cameraDistance - event.getDeltaY() * 0.35));
             previewCamera.setTranslateZ(-cameraDistance);
         });
         selectionMarquee.setFill(Color.color(0.15, 0.55, 0.95, 0.24));
@@ -801,29 +809,39 @@ public final class ModelStudio {
         });
         for (ToggleButton tool : List.of(boxSelectToggle, brushToggle)) {
             tool.setMaxWidth(Double.MAX_VALUE);
+            tool.setStyle("-fx-background-color: #2a3437; -fx-text-fill: #edf2ef; -fx-border-color: #566264;"
+                    + "-fx-background-radius: 6; -fx-border-radius: 6; -fx-padding: 5 8 5 8;");
         }
         toolboxOpenButton.setText("＋");
         toolboxOpenButton.setTooltip(new javafx.scene.control.Tooltip("Open Create / Assets shelf"));
         toolboxOpenButton.setMaxWidth(Double.MAX_VALUE);
         toolboxOpenButton.setOnAction(event -> toggleToolbox());
-        VBox toolShelf = new VBox(5, toolboxOpenButton, selectTool, boxSelectToggle, brushToggle);
-        toolShelf.setPrefWidth(74);
-        toolShelf.setMaxWidth(74);
-        toolShelf.setPadding(new Insets(8));
-        toolShelf.setStyle("-fx-background-color: #202729cc; -fx-border-color: #465153;"
-                + "-fx-border-width: 1; -fx-background-radius: 4; -fx-border-radius: 4;");
+        toolboxOpenButton.setStyle("-fx-background-color: #2e383b; -fx-text-fill: #f3f5f3; -fx-border-color: #5a696d;"
+                + "-fx-background-radius: 6; -fx-border-radius: 6; -fx-padding: 6 0 6 0;");
 
-        Label mode = new Label("Object Mode");
+        Label shelfLabel = new Label("TOOLS");
+        shelfLabel.setStyle("-fx-text-fill: #9aa6a3; -fx-font-size: 9px; -fx-font-weight: bold; -fx-letter-spacing: 1.2px;");
+        VBox toolShelf = new VBox(5, shelfLabel, toolboxOpenButton, selectTool, boxSelectToggle, brushToggle);
+        toolShelf.setPrefWidth(90);
+        toolShelf.setMaxWidth(90);
+        toolShelf.setPadding(new Insets(9, 8, 9, 8));
+        toolShelf.setStyle("-fx-background-color: #202729cc; -fx-border-color: #465153;"
+                + "-fx-border-width: 1; -fx-background-radius: 6; -fx-border-radius: 6;"
+                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.28), 10, 0.25, 0, 2);");
+
+        Label mode = new Label("OBJECT MODE");
         mode.setStyle("-fx-text-fill: #e2e7e3; -fx-background-color: #353d3f;"
-                + "-fx-padding: 6 10 6 10; -fx-border-color: #596365;");
+                + "-fx-padding: 6 10 6 10; -fx-border-color: #596365; -fx-font-weight: bold; -fx-letter-spacing: 1px;");
         Button viewButton = new Button("View");
         viewButton.setTooltip(new javafx.scene.control.Tooltip("Reset the viewport to the default perspective."));
         viewButton.setOnAction(event -> {
             yaw.setAngle(-25);
             pitch.setAngle(-18);
-            cameraDistance = 190;
-            previewCamera.setTranslateZ(-cameraDistance);
+            frameAll();
         });
+        Button frameButton = new Button("Frame All");
+        frameButton.setTooltip(new javafx.scene.control.Tooltip("Fit every scene object in the viewport (F)."));
+        frameButton.setOnAction(event -> frameAll());
         Button selectButton = new Button("Select");
         selectButton.setOnAction(event -> {
             boxSelectToggle.setSelected(false);
@@ -839,18 +857,18 @@ public final class ModelStudio {
         removeObject.setOnAction(event -> removeSelectedPart());
         MenuButton objectMenu = new MenuButton("Object");
         objectMenu.getItems().addAll(duplicateObject, removeObject);
-        HBox viewportHeader = new HBox(5, mode, viewButton, selectButton, addButton, objectMenu);
+        HBox viewportHeader = new HBox(6, mode, viewButton, frameButton, selectButton, addButton, objectMenu);
         viewportHeader.setAlignment(Pos.CENTER_LEFT);
-        viewportHeader.setPadding(new Insets(5, 8, 5, 8));
+        viewportHeader.setPadding(new Insets(5, 10, 5, 10));
         viewportHeader.setStyle("-fx-background-color: #292f31ee; -fx-border-color: #454d4f;"
-                + "-fx-border-width: 0 0 1 0;");
+                + "-fx-border-width: 0 0 1 0; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 10, 0.15, 0, 2);");
 
         Button axisX = axisButton("X", "#d05b56", 90, 0);
         Button axisY = axisButton("Y", "#65a854", -25, -78);
         Button axisZ = axisButton("Z", "#548fc8", -25, 0);
         HBox axisGizmo = new HBox(4, axisX, axisY, axisZ);
         axisGizmo.setPadding(new Insets(6));
-        axisGizmo.setStyle("-fx-background-color: #202729cc; -fx-background-radius: 4;");
+        axisGizmo.setStyle("-fx-background-color: #202729cc; -fx-background-radius: 4; -fx-border-color: #4f5c5f; -fx-border-width: 1; -fx-padding: 6; ");
 
         toolboxOverlay = new BorderPane();
         Label toolboxTitle = new Label("CREATE / ASSETS");
@@ -918,6 +936,38 @@ public final class ModelStudio {
         StackPane.setAlignment(inspectorRevealButton, Pos.TOP_RIGHT);
         StackPane.setMargin(inspectorRevealButton, new Insets(12));
         return viewportPane;
+    }
+
+    private void frameAll() {
+        if (parts.isEmpty()) {
+            previewWorld.setTranslateX(0);
+            previewWorld.setTranslateY(0);
+            previewWorld.setTranslateZ(0);
+            cameraDistance = 190;
+            previewCamera.setTranslateY(-55);
+            previewCamera.setTranslateZ(-cameraDistance);
+            statusLabel.setText("Viewport reset · no scene objects to frame");
+            return;
+        }
+
+        Bounds bounds = partRoot.getBoundsInParent();
+        previewWorld.setTranslateX(-bounds.getCenterX());
+        previewWorld.setTranslateY(-bounds.getCenterY());
+        previewWorld.setTranslateZ(-bounds.getCenterZ());
+
+        double halfWidth = bounds.getWidth() / 2;
+        double halfHeight = bounds.getHeight() / 2;
+        double halfDepth = bounds.getDepth() / 2;
+        double radius = Math.sqrt(halfWidth * halfWidth + halfHeight * halfHeight + halfDepth * halfDepth);
+        double verticalFov = Math.toRadians(previewCamera.getFieldOfView());
+        double aspect = preview.getHeight() > 0
+                ? Math.max(0.1, preview.getWidth() / preview.getHeight()) : 1.5;
+        double horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
+        double limitingFov = Math.min(verticalFov, horizontalFov);
+        cameraDistance = Math.max(30, Math.min(2500, radius / Math.tan(limitingFov / 2) * 1.2));
+        previewCamera.setTranslateY(0);
+        previewCamera.setTranslateZ(-cameraDistance);
+        statusLabel.setText("Framed all " + parts.size() + " scene object(s)");
     }
 
     private Button axisButton(String axis, String color, double yawAngle, double pitchAngle) {
@@ -1174,8 +1224,8 @@ public final class ModelStudio {
         properties.setFitToWidth(true);
         properties.setStyle("-fx-background: #202729; -fx-background-color: #202729;");
         inspectorContent.setStyle("-fx-background-color: #202729;");
-        Label dockTitle = new Label("OUTLINER");
-        dockTitle.setStyle("-fx-text-fill: #e4d9bf; -fx-font-size: 11px; -fx-font-weight: bold;");
+        Label dockTitle = new Label("SCENE COLLECTION");
+        dockTitle.setStyle("-fx-text-fill: #e4d9bf; -fx-font-size: 11px; -fx-font-weight: bold; -fx-letter-spacing: 0.7px;");
         Button closeInspector = new Button("×");
         closeInspector.setFocusTraversable(false);
         closeInspector.setTooltip(new javafx.scene.control.Tooltip("Close Explorer and Properties"));
@@ -1201,6 +1251,7 @@ public final class ModelStudio {
         explorerProperties.setOrientation(javafx.geometry.Orientation.VERTICAL);
         explorerProperties.setDividerPositions(explorerDividerPosition);
         explorerProperties.setMinSize(0, 0);
+        explorerProperties.setStyle("-fx-background-color: #202729; -fx-padding: 0;");
         explorerProperties.getDividers().get(0).positionProperty().addListener(
                 (obs, oldPosition, newPosition) -> explorerDividerPosition = newPosition.doubleValue());
 
