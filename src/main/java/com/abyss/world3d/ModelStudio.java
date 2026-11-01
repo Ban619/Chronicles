@@ -38,6 +38,7 @@ import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.RowConstraints;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -685,11 +686,21 @@ public final class ModelStudio {
                 + "-fx-focus-color: #168eb5;"
                 + "-fx-faint-focus-color: transparent;");
         partList.setCellFactory(list -> new ListCell<>() {
+            {
+                selectedProperty().addListener((obs, wasSelected, isSelected) -> updateCellStyle());
+            }
+
             @Override
             protected void updateItem(CustomModelDefinition.Part item, boolean empty) {
                 super.updateItem(item, empty);
                 setText(empty || item == null ? null : item.name + "  ·  " + item.shape);
-                setStyle("-fx-text-fill: #e4e9e5;");
+                updateCellStyle();
+            }
+
+            private void updateCellStyle() {
+                setStyle(isSelected()
+                        ? "-fx-background-color: #078db8; -fx-text-fill: #ffffff;"
+                        : "-fx-background-color: #202729; -fx-text-fill: #e4e9e5;");
             }
         });
         partList.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> showPart(selected));
@@ -729,6 +740,13 @@ public final class ModelStudio {
             constraints.setHgrow(Priority.ALWAYS);
             constraints.setMinWidth(0);
             hierarchyActions.getColumnConstraints().add(constraints);
+        }
+        for (int row = 0; row < 2; row++) {
+            RowConstraints constraints = new RowConstraints();
+            constraints.setMinHeight(30);
+            constraints.setPrefHeight(30);
+            constraints.setMaxHeight(30);
+            hierarchyActions.getRowConstraints().add(constraints);
         }
 
         GridPane transformGrid = new GridPane();
