@@ -4,11 +4,14 @@ import com.abyss.world.Tile;
 import javafx.beans.binding.Bindings;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
+import javafx.geometry.Point3D;
 import javafx.geometry.Pos;
 import javafx.scene.AmbientLight;
 import javafx.scene.Group;
 import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.PerspectiveCamera;
 import javafx.scene.PointLight;
 import javafx.scene.Scene;
@@ -23,18 +26,20 @@ import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Separator;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TreeCell;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
+import javafx.scene.control.Slider;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
-import javafx.scene.control.Slider;
 import javafx.scene.image.Image;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.Dragboard;
+import javafx.scene.input.MouseButton;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
@@ -48,6 +53,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Box;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.Shape3D;
 import javafx.scene.transform.Rotate;
 import javafx.stage.FileChooser;
@@ -87,12 +93,14 @@ public final class ModelStudio {
     private final ComboBox<String> materialPicker = new ComboBox<>();
     private final ComboBox<String> finishPicker = new ComboBox<>();
     private final ToggleButton brushToggle = new ToggleButton("Paint brush: off");
+    private final ToggleButton boxSelectToggle = new ToggleButton("Box select: off");
     private final Button inspectorOpenButton = new Button("Component Inspector");
     private final Button viewportModeButton = new Button("Expand viewport");
     private final Button inspectorRevealButton = new Button("Open Component Inspector");
     private final Slider brushRadius = new Slider(1, 80, 24);
     private final Label brushRadiusLabel = new Label("Brush radius: 24");
     private final Label statusLabel = new Label("Ready");
+    private final Rectangle selectionMarquee = new Rectangle();
     private final ObservableList<CustomModelDefinition.Part> parts = FXCollections.observableArrayList();
     private final Deque<EditorSnapshot> undoHistory = new ArrayDeque<>();
     private final Deque<EditorSnapshot> redoHistory = new ArrayDeque<>();
@@ -103,12 +111,15 @@ public final class ModelStudio {
     private double dragX;
     private double dragY;
     private double cameraDistance = 190;
+    private double selectionStartX;
+    private double selectionStartY;
     private Path currentFile;
     private int nextPartNumber = 1;
     private boolean syncingInspector;
     private boolean restoringHistory;
     private boolean rebuildingPartTree;
     private boolean viewportOnly;
+    private boolean boxSelecting;
     private boolean inspectorOpen = true;
     private double toolboxDividerPosition = 0.17;
     private double inspectorDividerPosition = 0.78;
@@ -116,6 +127,7 @@ public final class ModelStudio {
     private double dragStartX;
     private double dragStartY;
     private SubScene preview;
+    private PerspectiveCamera previewCamera;
     private StackPane viewport;
     private javafx.scene.control.SplitPane workspace;
     private VBox inspector;
@@ -613,38 +625,80 @@ public final class ModelStudio {
         previewRoot.getChildren().add(world);
         previewRoot.getTransforms().setAll(yaw, pitch);
 
-        PerspectiveCamera camera = new PerspectiveCamera(true);
-        camera.setNearClip(0.1);
-        camera.setFarClip(2000);
-        camera.setFieldOfView(42);
-        camera.setTranslateY(-55);
-        camera.setTranslateZ(-cameraDistance);
+        previewCamera = new PerspectiveCamera(true);
+        previewCamera.setNearClip(0.1);
+        previewCamera.setFarClip(2000);
+        previewCamera.setFieldOfView(42);
+        previewCamera.setTranslateY(-55);
+        previewCamera.setTranslateZ(-cameraDistance);
 
         preview = new SubScene(previewRoot, 800, 700, true,
                 javafx.scene.SceneAntialiasing.BALANCED);
         preview.setFill(Color.web("#20292a"));
-        preview.setCamera(camera);
+        preview.setCamera(previewCamera);
         preview.widthProperty().bind(Bindings.max(1, viewportPane.widthProperty()));
         preview.heightProperty().bind(Bindings.max(1, viewportPane.heightProperty()));
         preview.setOnMousePressed(event -> {
             dragX = dragStartX = event.getSceneX();
             dragY = dragStartY = event.getSceneY();
+            if (event.getButton() == MouseButton.PRIMARY && boxSelectToggle.isSelected()
+                    && !brushToggle.isSelected()) {
+                boxSelecting = true;
+                selectionStartX = event.getX();
+                selectionStartY = event.getY();
+                updateSelectionMarquee(selectionStartX, selectionStartY);
+            }
         });
         preview.setOnMouseDragged(event -> {
+            if (boxSelecting) {
+                updateSelectionMarquee(event.getX(), event.getY());
+                event.consume();
+                return;
+            }
             yaw.setAngle(yaw.getAngle() + (event.getSceneX() - dragX) * 0.7);
             pitch.setAngle(Math.max(-78, Math.min(12,
                     pitch.getAngle() + (event.getSceneY() - dragY) * 0.7)));
             dragX = event.getSceneX();
             dragY = event.getSceneY();
         });
+        preview.setOnMouseReleased(event -> {
+            if (!boxSelecting) return;
+            boxSelecting = false;
+            double endX = event.getX();
+            double endY = event.getY();
+            selectionMarquee.setVisible(false);
+            if (Math.hypot(endX - selectionStartX, endY - selectionStartY) > 4) {
+                selectPartsInRectangle(selectionStartX, selectionStartY, endX, endY);
+            }
+            event.consume();
+        });
         preview.setOnMouseClicked(event -> {
-            if (!brushToggle.isSelected()) return;
             if (Math.hypot(event.getSceneX() - dragStartX, event.getSceneY() - dragStartY) > 4) return;
-            paintPickedComponent(event.getPickResult().getIntersectedNode());
+            Node pickedNode = event.getPickResult().getIntersectedNode();
+            if (brushToggle.isSelected()) paintPickedComponent(pickedNode);
+            else selectPartFromNode(pickedNode);
         });
         preview.setOnScroll(event -> {
             cameraDistance = Math.max(90, Math.min(440, cameraDistance - event.getDeltaY() * 0.35));
-            camera.setTranslateZ(-cameraDistance);
+            previewCamera.setTranslateZ(-cameraDistance);
+        });
+        selectionMarquee.setFill(Color.color(0.15, 0.55, 0.95, 0.24));
+        selectionMarquee.setStroke(Color.web("#55b9ff"));
+        selectionMarquee.setStrokeWidth(1.5);
+        selectionMarquee.setMouseTransparent(true);
+        selectionMarquee.setManaged(false);
+        selectionMarquee.setVisible(false);
+        boxSelectToggle.setTooltip(new javafx.scene.control.Tooltip(
+                "Drag a rectangle to select every part it touches, including parts behind other parts."));
+        boxSelectToggle.setOnAction(event -> {
+            boxSelectToggle.setText(boxSelectToggle.isSelected() ? "Box select: on" : "Box select: off");
+            if (boxSelectToggle.isSelected() && brushToggle.isSelected()) {
+                brushToggle.setSelected(false);
+                brushToggle.setText("Paint brush: off");
+            }
+            statusLabel.setText(boxSelectToggle.isSelected()
+                    ? "Box select active · drag a rectangle across the viewport"
+                    : "Box select disabled · drag viewport to orbit");
         });
         viewportPane.setOnDragOver(event -> {
             if (event.getGestureSource() != viewportPane && event.getDragboard().hasString()) {
@@ -666,16 +720,19 @@ public final class ModelStudio {
             event.consume();
         });
 
-        Label hint = new Label("Drag to orbit   ·   Scroll to zoom   ·   Model origin is the tile center");
+        Label hint = new Label("Drag to orbit   ·   Box select for area selection   ·   Scroll to zoom");
         hint.setStyle("-fx-text-fill: #a7b0a8; -fx-background-color: #171e20cc; -fx-padding: 8 12 8 12;");
         inspectorRevealButton.setOnAction(event -> revealInspector());
         inspectorRevealButton.setStyle("-fx-text-fill: #e4d9bf; -fx-background-color: #202729; -fx-border-color: #6f7d74; -fx-padding: 8 12 8 12;");
         inspectorRevealButton.setVisible(false);
         inspectorRevealButton.setManaged(false);
-        viewportPane.getChildren().addAll(preview, hint, inspectorRevealButton);
+        viewportPane.getChildren().addAll(preview, selectionMarquee, hint, boxSelectToggle, inspectorRevealButton);
         viewportPane.setMinSize(0, 0);
         StackPane.setAlignment(hint, Pos.BOTTOM_LEFT);
         StackPane.setMargin(hint, new Insets(12));
+        StackPane.setAlignment(selectionMarquee, Pos.TOP_LEFT);
+        StackPane.setAlignment(boxSelectToggle, Pos.TOP_LEFT);
+        StackPane.setMargin(boxSelectToggle, new Insets(12));
         StackPane.setAlignment(inspectorRevealButton, Pos.TOP_RIGHT);
         StackPane.setMargin(inspectorRevealButton, new Insets(12));
         return viewportPane;
@@ -684,6 +741,7 @@ public final class ModelStudio {
     private VBox buildInspector() {
         partList.setMinHeight(70);
         partList.setShowRoot(false);
+        partList.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         partList.setTooltip(new javafx.scene.control.Tooltip(
                 "Drag near a row edge to reorder; drop in the middle to nest. Nested transforms are relative to the parent."));
         partList.setStyle("-fx-control-inner-background: #171e20;"
@@ -868,6 +926,10 @@ public final class ModelStudio {
         });
         brushToggle.setOnAction(event -> {
             brushToggle.setText(brushToggle.isSelected() ? "Paint brush: on" : "Paint brush: off");
+            if (brushToggle.isSelected() && boxSelectToggle.isSelected()) {
+                boxSelectToggle.setSelected(false);
+                boxSelectToggle.setText("Box select: off");
+            }
             statusLabel.setText(brushToggle.isSelected()
                     ? "Brush active · click a model surface to paint nearby components"
                     : "Brush disabled · drag viewport to orbit");
@@ -1076,6 +1138,133 @@ public final class ModelStudio {
     private CustomModelDefinition.Part selectedPart() {
         TreeItem<CustomModelDefinition.Part> selected = partList.getSelectionModel().getSelectedItem();
         return selected == null ? null : selected.getValue();
+    }
+
+    private void updateSelectionMarquee(double x, double y) {
+        double minX = Math.min(selectionStartX, x);
+        double minY = Math.min(selectionStartY, y);
+        selectionMarquee.setX(0);
+        selectionMarquee.setY(0);
+        selectionMarquee.setTranslateX(minX);
+        selectionMarquee.setTranslateY(minY);
+        selectionMarquee.setWidth(Math.abs(x - selectionStartX));
+        selectionMarquee.setHeight(Math.abs(y - selectionStartY));
+        selectionMarquee.setVisible(true);
+    }
+
+    private void selectPartsInRectangle(double startX, double startY, double endX, double endY) {
+        double minX = Math.min(startX, endX);
+        double minY = Math.min(startY, endY);
+        double maxX = Math.max(startX, endX);
+        double maxY = Math.max(startY, endY);
+        partList.getSelectionModel().clearSelection();
+
+        CustomModelDefinition.Part lastSelected = null;
+        for (CustomModelDefinition.Part part : parts) {
+            Node partNode = findPartNode(partRoot, part.id);
+            ProjectedBounds bounds = partNode == null ? null : projectBounds(partNode);
+            if (bounds != null && bounds.intersects(minX, minY, maxX, maxY)) {
+                TreeItem<CustomModelDefinition.Part> item = findTreeItem(partList.getRoot(), part);
+                if (item != null) {
+                    partList.getSelectionModel().select(item);
+                    lastSelected = part;
+                }
+            }
+        }
+
+        if (lastSelected == null) {
+            statusLabel.setText("Box select found no parts");
+        } else {
+            showPart(lastSelected);
+            statusLabel.setText("Selected " + partList.getSelectionModel().getSelectedItems().size()
+                    + " part(s), including parts behind others");
+        }
+    }
+
+    private void selectPartFromNode(Node pickedNode) {
+        Node current = pickedNode;
+        while (current != null && current != partRoot
+                && !(current.getUserData() instanceof CustomModelDefinition.Part)) {
+            current = current.getParent();
+        }
+        if (current != null && current.getUserData() instanceof CustomModelDefinition.Part part) {
+            TreeItem<CustomModelDefinition.Part> item = findTreeItem(partList.getRoot(), part);
+            if (item != null) {
+                partList.getSelectionModel().clearSelection();
+                partList.getSelectionModel().select(item);
+                statusLabel.setText("Selected " + part.name);
+                return;
+            }
+        }
+        partList.getSelectionModel().clearSelection();
+        statusLabel.setText("No scene object at that position");
+    }
+
+    private ProjectedBounds projectBounds(Node node) {
+        Bounds bounds = node.getBoundsInLocal();
+        double minX = Double.POSITIVE_INFINITY;
+        double minY = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double maxY = Double.NEGATIVE_INFINITY;
+        double verticalFov = previewCamera.isVerticalFieldOfView()
+                ? previewCamera.getFieldOfView()
+                : Math.toDegrees(2 * Math.atan(Math.tan(
+                        Math.toRadians(previewCamera.getFieldOfView()) / 2)
+                        * preview.getHeight() / preview.getWidth()));
+        double focalLength = preview.getHeight() / (2 * Math.tan(Math.toRadians(verticalFov) / 2));
+        for (int x = 0; x < 2; x++) {
+            for (int y = 0; y < 2; y++) {
+                for (int z = 0; z < 2; z++) {
+                    Point3D localPoint = new Point3D(
+                            x == 0 ? bounds.getMinX() : bounds.getMaxX(),
+                            y == 0 ? bounds.getMinY() : bounds.getMaxY(),
+                            z == 0 ? bounds.getMinZ() : bounds.getMaxZ());
+                    Point3D cameraPoint = previewCamera.sceneToLocal(node.localToScene(localPoint));
+                    if (cameraPoint.getZ() <= previewCamera.getNearClip()) continue;
+                    double screenX = preview.getWidth() / 2
+                            + cameraPoint.getX() * focalLength / cameraPoint.getZ();
+                    double screenY = preview.getHeight() / 2
+                            + cameraPoint.getY() * focalLength / cameraPoint.getZ();
+                    minX = Math.min(minX, screenX);
+                    minY = Math.min(minY, screenY);
+                    maxX = Math.max(maxX, screenX);
+                    maxY = Math.max(maxY, screenY);
+                }
+            }
+        }
+        return minX == Double.POSITIVE_INFINITY ? null : new ProjectedBounds(minX, minY, maxX, maxY);
+    }
+
+    private Node findPartNode(Node node, String id) {
+        if (node.getUserData() instanceof CustomModelDefinition.Part part && part.id.equals(id)) {
+            return node;
+        }
+        if (node instanceof Parent parent) {
+            for (Node child : parent.getChildrenUnmodifiable()) {
+                Node found = findPartNode(child, id);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private TreeItem<CustomModelDefinition.Part> findTreeItem(
+            TreeItem<CustomModelDefinition.Part> item, CustomModelDefinition.Part part) {
+        if (item == null) return null;
+        if (item.getValue() == part) return item;
+        for (TreeItem<CustomModelDefinition.Part> child : item.getChildren()) {
+            TreeItem<CustomModelDefinition.Part> found = findTreeItem(child, part);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private record ProjectedBounds(double minX, double minY, double maxX, double maxY) {
+        private boolean intersects(double selectionMinX, double selectionMinY,
+                                   double selectionMaxX, double selectionMaxY) {
+            return maxX >= selectionMinX && minX <= selectionMaxX
+                    && maxY >= selectionMinY && minY <= selectionMaxY;
+        }
     }
 
     private int selectedPartIndex() {
