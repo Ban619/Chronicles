@@ -98,6 +98,8 @@ public final class ModelStudio {
     private final ComboBox<String> shapePicker = new ComboBox<>();
     private final ComboBox<String> materialPicker = new ComboBox<>();
     private final ComboBox<String> finishPicker = new ComboBox<>();
+    private VBox selectedProperties;
+    private Label inspectorSelectionLabel;
     private final ToggleButton brushToggle = new ToggleButton("Brush");
     private final ToggleButton boxSelectToggle = new ToggleButton("Box");
     private final Button inspectorOpenButton = new Button("Component Inspector");
@@ -1672,6 +1674,10 @@ public final class ModelStudio {
                 selectedPartId = selected.getValue().id;
                 showPart(selected.getValue());
                 drawTransformGizmo();
+            } else if (!rebuildingPartTree && partList.getSelectionModel().getSelectedItems().isEmpty()) {
+                selectedPartId = null;
+                showPart(null);
+                drawTransformGizmo();
             }
         });
         hierarchySearch.setPromptText("Search scene objects");
@@ -1841,7 +1847,7 @@ public final class ModelStudio {
 
         Label partsLabel = new Label("SCENE OBJECTS");
         partsLabel.setStyle("-fx-text-fill: #d7dfd9; -fx-font-weight: bold;");
-        Label transformLabel = new Label("SELECTED COMPONENT");
+        inspectorSelectionLabel = new Label("SELECTED COMPONENT");
         Label surfaceLabel = new Label("SURFACE MATERIAL");
         VBox hierarchy = new VBox(8, partsLabel, hierarchySearch, hierarchyActions, partList);
         hierarchy.setPadding(new Insets(12));
@@ -1849,14 +1855,16 @@ public final class ModelStudio {
         hierarchy.setStyle("-fx-background-color: #202729; -fx-border-color: #343d3e; -fx-border-width: 0 0 1 0;");
         VBox.setVgrow(partList, Priority.ALWAYS);
 
-        VBox inspectorContent = new VBox(9, transformLabel,
+        selectedProperties = new VBox(9,
             new VBox(3, new Label("Component name"), partName), finishControls,
             new VBox(3, new Label("Semantic preset"), materialPicker),
             new Label("Brush palette"), palette, brushRadiusLabel, brushRadius,
             new Label("Base color / opacity"), colorPicker, transformGrid, apply,
             new Separator(), surfaceLabel,
             new Label("Preset sets a useful base color. Finish controls specular response."));
+        VBox inspectorContent = new VBox(9, inspectorSelectionLabel, selectedProperties);
         inspectorContent.setPadding(new Insets(9));
+        showPart(selectedPart());
         ScrollPane properties = new ScrollPane(inspectorContent);
         properties.setFitToWidth(true);
         properties.setStyle("-fx-background: #202729; -fx-background-color: #202729;");
@@ -2498,8 +2506,24 @@ public final class ModelStudio {
     }
 
     private void showPart(CustomModelDefinition.Part part) {
-        if (part == null) return;
         syncingInspector = true;
+        if (part == null) {
+            inspectorSelectionLabel.setText("NO COMPONENT SELECTED");
+            selectedProperties.setDisable(true);
+            partName.clear();
+            shapePicker.setValue(null);
+            materialPicker.setValue(null);
+            finishPicker.setValue(null);
+            for (TextField value : values) {
+                value.clear();
+                value.setStyle("");
+            }
+            colorPicker.setValue(Color.web("#8b8e83"));
+            syncingInspector = false;
+            return;
+        }
+        inspectorSelectionLabel.setText("SELECTED COMPONENT");
+        selectedProperties.setDisable(false);
         partName.setText(part.name);
         shapePicker.setValue(part.shape == null ? "BOX" : part.shape.toUpperCase());
         materialPicker.setValue(SemanticMaterial.from(part.material).name());
