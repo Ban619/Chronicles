@@ -862,7 +862,7 @@ public final class ModelStudio {
         partsLabel.setStyle("-fx-text-fill: #d7dfd9; -fx-font-weight: bold;");
         Label transformLabel = new Label("SELECTED COMPONENT");
         Label surfaceLabel = new Label("SURFACE MATERIAL");
-        VBox hierarchy = new VBox(8, partsLabel, partList, hierarchyActions);
+        VBox hierarchy = new VBox(8, partsLabel, hierarchyActions, partList);
         hierarchy.setPadding(new Insets(12));
         hierarchy.setMinSize(0, 190);
         hierarchy.setStyle("-fx-background-color: #202729; -fx-border-color: #343d3e; -fx-border-width: 0 0 1 0;");
