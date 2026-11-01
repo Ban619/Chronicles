@@ -66,6 +66,11 @@ public class Tile {
     public static final int FENCE       = 76;
     public static final int WELL        = 77;
     public static final int BENCH       = 78;
+    public static final int SHRUB       = 79;
+    public static final int MUSHROOM    = 80;
+    public static final int REEDS       = 81;
+    public static final int RUBBLE      = 82;
+    public static final int LANTERN     = 83;
 
     // ── Fields ────────────────────────────────────────────────────────────
     private int     id;
@@ -153,6 +158,11 @@ public class Tile {
                 case FENCE -> renderFence(gc, x, y, variation);
                 case WELL -> renderWell(gc, x, y, variation);
                 case BENCH -> renderBench(gc, x, y, variation);
+                case SHRUB -> renderShrub(gc, x, y, variation);
+                case MUSHROOM -> renderMushroom(gc, x, y, variation);
+                case REEDS -> renderReeds(gc, x, y, variation);
+                case RUBBLE -> renderRubble(gc, x, y, variation);
+                case LANTERN -> renderLantern(gc, x, y, variation);
                 default -> { }
             }
             return;
@@ -185,6 +195,11 @@ public class Tile {
             case FENCE -> renderFence(gc, x, y, variation);
             case WELL -> renderWell(gc, x, y, variation);
             case BENCH -> renderBench(gc, x, y, variation);
+            case SHRUB -> renderShrub(gc, x, y, variation);
+            case MUSHROOM -> renderMushroom(gc, x, y, variation);
+            case REEDS -> renderReeds(gc, x, y, variation);
+            case RUBBLE -> renderRubble(gc, x, y, variation);
+            case LANTERN -> renderLantern(gc, x, y, variation);
             default -> renderStone(gc, x, y, variation);
         }
 
@@ -194,7 +209,7 @@ public class Tile {
     }
 
     private boolean isProceduralDecoration() {
-        return id >= FLOWERS && id <= BENCH;
+        return id >= FLOWERS && id <= LANTERN;
     }
 
     private void renderFlowers(GraphicsContext gc, int x, int y, int variation) {
@@ -335,6 +350,81 @@ public class Tile {
         gc.setStroke(Color.web("#b08350"));
         gc.setLineWidth(1);
         gc.strokeLine(x + 6, y + 13 + variation % 2, x + 26, y + 13 + variation % 2);
+    }
+
+    private void renderShrub(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0, 0, 0, 0.2));
+        gc.fillOval(x + 3, y + 24, 27, 6);
+        Color[] greens = {Color.web("#315b36"), Color.web("#3d6c3e"), Color.web("#527d45")};
+        for (int i = 0; i < 4; i++) {
+            int offset = (variation + i * 3) % 5;
+            gc.setFill(greens[(variation + i) % greens.length]);
+            gc.fillOval(x + 3 + i * 6, y + 13 + offset, 12, 12);
+        }
+        gc.setFill(Color.web("#779052"));
+        gc.fillOval(x + 8, y + 14, 4, 3);
+        gc.fillOval(x + 21, y + 17 + variation % 3, 3, 3);
+    }
+
+    private void renderMushroom(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0.25, 0.72, 0.65, 0.16));
+        gc.fillOval(x + 3, y + 20, 26, 10);
+        gc.setFill(Color.web("#d6c8a7"));
+        gc.fillRoundRect(x + 12, y + 15, 7, 12, 3, 3);
+        gc.setFill(variation % 2 == 0 ? Color.web("#b65d62") : Color.web("#bd8b52"));
+        gc.fillOval(x + 6, y + 8 + variation % 3, 19, 12);
+        gc.setFill(Color.web("#f4e7ca"));
+        gc.fillOval(x + 10, y + 11, 3, 3);
+        gc.fillOval(x + 19, y + 13 + variation % 2, 2, 2);
+        gc.setFill(Color.color(0.68, 0.95, 0.76, 0.7));
+        gc.fillOval(x + 13, y + 17, 3, 3);
+    }
+
+    private void renderReeds(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0, 0, 0, 0.16));
+        gc.fillOval(x + 4, y + 25, 24, 5);
+        gc.setStroke(Color.web("#567747"));
+        gc.setLineWidth(2);
+        for (int i = 0; i < 4; i++) {
+            double baseX = x + 7 + i * 6;
+            double topY = y + 7 + (variation + i * 2) % 7;
+            gc.strokeLine(baseX, y + 27, baseX + (i % 2 == 0 ? 2 : -2), topY);
+            gc.setFill(Color.web(i % 2 == 0 ? "#a58b4f" : "#b39b61"));
+            gc.fillOval(baseX - 1, topY - 2, 4, 7);
+        }
+    }
+
+    private void renderRubble(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0, 0, 0, 0.17));
+        gc.fillOval(x + 4, y + 23, 24, 6);
+        Color[] stones = {Color.web("#6b716d"), Color.web("#85877e"), Color.web("#555e60")};
+        for (int i = 0; i < 4; i++) {
+            int px = x + 5 + (i * 7 + variation) % 17;
+            int py = y + 15 + (i * 5 + variation) % 9;
+            gc.setFill(stones[(i + variation) % stones.length]);
+            gc.fillPolygon(new double[]{px, px + 4, px + 7, px + 3},
+                    new double[]{py + 2, py, py + 4, py + 6}, 4);
+        }
+    }
+
+    private void renderLantern(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0, 0, 0, 0.2));
+        gc.fillOval(x + 9, y + 25, 14, 5);
+        gc.setStroke(Color.web("#4a3929"));
+        gc.setLineWidth(3);
+        gc.strokeLine(x + 16, y + 28, x + 16, y + 8);
+        gc.setStroke(Color.web("#80603a"));
+        gc.setLineWidth(1.5);
+        gc.strokeLine(x + 13, y + 8, x + 19, y + 8);
+        gc.setFill(Color.color(1.0, 0.65, 0.2, 0.16));
+        gc.fillOval(x + 7, y + 2, 18, 19);
+        gc.setFill(Color.web("#c38a43"));
+        gc.fillRoundRect(x + 11, y + 5, 10, 12, 2, 2);
+        gc.setFill(Color.web(variation % 2 == 0 ? "#ffe39b" : "#ffd16b"));
+        gc.fillOval(x + 13, y + 7, 6, 8);
+        gc.setStroke(Color.web("#704d2d"));
+        gc.setLineWidth(1);
+        gc.strokeRect(x + 11, y + 5, 10, 12);
     }
 
     private void renderGrass(GraphicsContext gc, int x, int y, int variation) {

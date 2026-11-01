@@ -21,7 +21,7 @@
 
 Chapter 1 is a complete story path: meet Elder Aldric, clear three enemies in Thornwood, return for the Crypt clue, recover the Dawn Seal from the Crypt, defeat Malachar in Dragon's Maw, then return to Aldric for the ending. The active objective is shown in the HUD and saved with the player. A first-run guide explains controls and the route. Merchants sell health and mana potions and a starter weapon. Defeat returns the player to the current region's entrance with no loss of items or gold. Achievements and JSON-driven map contents are not implemented yet.
 
-Procedural maps use seeded layouts for consistent landmarks and routes. Ashenveil includes a river bridge, connected village roads, houses, a fenced garden, flowers, a well, and a bench. Thornwood has clear paths to its exits, a walled ruin, a winding stream, and biome-specific foliage and crystals. The Crypt has torch-lit chambers with pillars, graves, and crystals, while Dragon's Maw features a safe central platform, walkable paths through its lava ring, and surrounding pillars and crystals.
+Procedural maps use seeded layouts for consistent landmarks and routes. Ashenveil includes a river bridge, connected village roads, houses, a fenced garden, flowers, shrubs, lanterns, a well, and a bench. Thornwood has clear paths to its exits, a walled ruin, a winding stream, and biome-specific foliage, mushrooms, reeds, and crystals. The Crypt has torch-lit chambers with pillars, graves, rubble, and crystals, while Dragon's Maw features a safe central platform, walkable paths through its lava ring, and surrounding pillars and crystals. These environmental details are drawn procedurally and do not require a tileset.
 
 ---
 

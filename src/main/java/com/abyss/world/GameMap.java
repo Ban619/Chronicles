@@ -135,6 +135,9 @@ public class GameMap {
         placeDecoration(cols / 2 + 5, mid - 5, Tile.WELL);
         placeDecoration(21, mid - 6, Tile.BENCH);
         scatterDecorations(Tile.FLOWERS, Tile.GRASS, 0.045, 4, 4);
+        scatterDecorations(Tile.SHRUB, Tile.GRASS, 0.018, 4, 4);
+        placeDecoration(15, mid - 7, Tile.LANTERN);
+        placeDecoration(cols - 17, mid - 7, Tile.LANTERN);
         placeFence(7, rows - 13, 14, rows - 11, true);
         for (int c = 8; c <= 13; c += 2) placeDecoration(c, rows - 12, Tile.FLOWERS);
         startX=7*Tile.SIZE; startY=(mid-4)*Tile.SIZE;
@@ -213,6 +216,8 @@ public class GameMap {
         }
         scatterDecorations(Tile.FERN, Tile.GRASS, 0.035, 3, 3);
         scatterDecorations(Tile.ROCK, Tile.GRASS, 0.018, 3, 3);
+        scatterDecorations(Tile.MUSHROOM, Tile.GRASS, 0.012, 3, 3);
+        scatterDecorations(Tile.REEDS, Tile.SAND, 0.12, 3, 3);
         placeDecoration(ruinCol + 2, ruinRow + 2, Tile.GRAVE);
         placeDecoration(ruinCol + 6, ruinRow + 2, Tile.GRAVE);
         placeDecoration(pathCol + 9, rows / 2 - 7, Tile.CRYSTAL);
@@ -260,6 +265,7 @@ public class GameMap {
         placeDecoration(9 * sx, 16 * sy, Tile.GRAVE);
         placeDecoration(18 * sx, 24 * sy, Tile.CRYSTAL);
         placeDecoration(22 * sx, 24 * sy, Tile.CRYSTAL);
+        scatterDecorations(Tile.RUBBLE, Tile.FLOOR_STONE, 0.035, 2, 2);
         startX=5*sx*Tile.SIZE; startY=4*sy*Tile.SIZE;
     }
 
@@ -321,7 +327,8 @@ public class GameMap {
                                     int marginX, int marginY) {
         for (int row = marginY; row < rows - marginY; row++) {
             for (int col = marginX; col < cols - marginX; col++) {
-                if (objectLayer[row][col] != 0 || groundLayer[row][col] != groundId
+                if (objectLayer[row][col] != 0 || overlayLayer[row][col] != 0
+                        || groundLayer[row][col] != groundId
                         || layoutRandom.nextDouble() >= chance) continue;
                 objectLayer[row][col] = tileId;
             }

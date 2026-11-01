@@ -46,5 +46,7 @@ CharacterPainter.java, so character sprite sheets are optional.
 
 Enemy sprites and the tileset are also optional. If they are absent, enemies
 use distinct procedural silhouettes, and the world renderer draws biome-specific
-ground details. These fallbacks are designed to make the game playable without
-external art assets; adding the files above replaces the corresponding fallback.
+ground details and environment props such as flowers, shrubs, lanterns, mushrooms,
+reeds, rubble, ruins, and crystals. These fallbacks are designed to make the game
+playable without external art assets; adding the files above replaces the
+corresponding fallback.

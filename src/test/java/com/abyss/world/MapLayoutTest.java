@@ -63,12 +63,17 @@ class MapLayoutTest {
         assertTrue(countObjects(village, Tile.BENCH) > 0);
         assertTrue(countObjects(village, Tile.FENCE) > 0);
         assertTrue(countObjects(village, Tile.FLOWERS) > 0);
+        assertTrue(countObjects(village, Tile.SHRUB) > 0);
+        assertTrue(countObjects(village, Tile.LANTERN) >= 2);
         assertTrue(countObjects(forest, Tile.FERN) > 0);
         assertTrue(countObjects(forest, Tile.ROCK) > 0);
+        assertTrue(countObjects(forest, Tile.MUSHROOM) > 0);
+        assertTrue(countObjects(forest, Tile.REEDS) > 0);
         assertTrue(countObjects(forest, Tile.CRYSTAL) >= 2);
         assertTrue(countObjects(crypt, Tile.PILLAR) >= 4,
                 "crypt pillar count: " + countObjects(crypt, Tile.PILLAR));
         assertTrue(countObjects(crypt, Tile.GRAVE) >= 2);
+        assertTrue(countObjects(crypt, Tile.RUBBLE) > 0);
         assertTrue(countObjects(arena, Tile.PILLAR) >= 4);
         assertTrue(countObjects(arena, Tile.CRYSTAL) >= 4);
 
@@ -89,6 +94,9 @@ class MapLayoutTest {
                     count++;
                     assertTrue(new Tile(tileId).isWalkable(),
                             "decoration should remain walkable: " + tileId);
+                    assertFalse(map.isBlocked(col * Tile.SIZE, row * Tile.SIZE,
+                            Tile.SIZE, Tile.SIZE),
+                            "decoration should not block movement: " + tileId);
                 }
             }
         }
