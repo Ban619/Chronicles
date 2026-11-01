@@ -104,6 +104,7 @@ public final class ModelStudio {
     private boolean inspectorOpen = true;
     private double toolboxDividerPosition = 0.17;
     private double inspectorDividerPosition = 0.78;
+    private double explorerDividerPosition = 0.43;
     private double dragStartX;
     private double dragStartY;
     private SubScene preview;
@@ -675,9 +676,7 @@ public final class ModelStudio {
     private VBox buildInspector() {
         partList.setItems(parts);
         partList.setPrefWidth(230);
-        partList.setPrefHeight(150);
-        partList.setMinHeight(120);
-        partList.setMaxHeight(190);
+        partList.setMinHeight(0);
         partList.setCellFactory(list -> new ListCell<>() {
             @Override
             protected void updateItem(CustomModelDefinition.Part item, boolean empty) {
@@ -697,6 +696,7 @@ public final class ModelStudio {
         Button moveDown = new Button("Move down");
         moveDown.setOnAction(event -> moveSelectedPart(1));
         FlowPane hierarchyActions = new FlowPane(6, 5, duplicate, moveUp, moveDown);
+        hierarchyActions.setMinHeight(0);
 
         GridPane transformGrid = new GridPane();
         transformGrid.setHgap(7);
@@ -808,11 +808,14 @@ public final class ModelStudio {
         HBox.setHgrow(finishPicker, Priority.ALWAYS);
 
         Label partsLabel = new Label("SCENE OBJECTS");
+        partsLabel.setStyle("-fx-text-fill: #d7dfd9; -fx-font-weight: bold;");
         Label transformLabel = new Label("SELECTED COMPONENT");
         Label surfaceLabel = new Label("SURFACE MATERIAL");
         VBox hierarchy = new VBox(8, partsLabel, partList, hierarchyActions, remove);
         hierarchy.setPadding(new Insets(12));
+        hierarchy.setMinSize(0, 0);
         hierarchy.setStyle("-fx-background-color: #202729; -fx-border-color: #343d3e; -fx-border-width: 0 0 1 0;");
+        VBox.setVgrow(partList, Priority.ALWAYS);
 
         VBox inspectorContent = new VBox(9, transformLabel,
             new VBox(3, new Label("Component name"), partName), finishControls,
@@ -843,13 +846,24 @@ public final class ModelStudio {
         propertiesTitle.setStyle("-fx-text-fill: #e4d9bf; -fx-font-size: 11px; -fx-font-weight: bold;"
             + "-fx-background-color: #252d2f; -fx-padding: 8 12 8 12;"
             + "-fx-border-color: #343d3e; -fx-border-width: 1 0 1 0;");
-        hierarchy.setPrefHeight(255);
-        hierarchy.setMinHeight(0);
-        VBox inspectorPane = new VBox(dockTitleBar, hierarchy, propertiesTitle, properties);
+        properties.setMinSize(0, 0);
+        VBox propertiesPane = new VBox(propertiesTitle, properties);
+        propertiesPane.setMinSize(0, 0);
+        VBox.setVgrow(properties, Priority.ALWAYS);
+
+        javafx.scene.control.SplitPane explorerProperties =
+                new javafx.scene.control.SplitPane(hierarchy, propertiesPane);
+        explorerProperties.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        explorerProperties.setDividerPositions(explorerDividerPosition);
+        explorerProperties.setMinSize(0, 0);
+        explorerProperties.getDividers().get(0).positionProperty().addListener(
+                (obs, oldPosition, newPosition) -> explorerDividerPosition = newPosition.doubleValue());
+
+        VBox inspectorPane = new VBox(dockTitleBar, explorerProperties);
         inspectorPane.setPrefWidth(330);
         inspectorPane.setMinWidth(0);
         inspectorPane.setStyle("-fx-background-color: #202729; -fx-border-color: #343d3e; -fx-border-width: 0 0 0 1;");
-        VBox.setVgrow(properties, Priority.ALWAYS);
+        VBox.setVgrow(explorerProperties, Priority.ALWAYS);
         return inspectorPane;
     }
 
