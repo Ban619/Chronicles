@@ -57,6 +57,15 @@ public class Tile {
     public static final int TREE_BASE   = 50;
     public static final int TREE_TOP    = 51;
     public static final int BRIDGE      = 60;
+    public static final int FLOWERS     = 70;
+    public static final int FERN        = 71;
+    public static final int ROCK        = 72;
+    public static final int GRAVE       = 73;
+    public static final int PILLAR      = 74;
+    public static final int CRYSTAL     = 75;
+    public static final int FENCE       = 76;
+    public static final int WELL        = 77;
+    public static final int BENCH       = 78;
 
     // ── Fields ────────────────────────────────────────────────────────────
     private int     id;
@@ -121,7 +130,7 @@ public class Tile {
 
     /** Render a single tile cell from the tileset. */
     public void render(GraphicsContext gc, Image tileset, int pixelX, int pixelY, int tilesPerRow) {
-        if (tileset == null) {
+        if (tileset == null || isProceduralDecoration()) {
             renderFallback(gc, pixelX, pixelY);
             return;
         }
@@ -133,6 +142,21 @@ public class Tile {
 
     private void renderFallback(GraphicsContext gc, int x, int y) {
         int variation = Math.floorMod(x * 31 + y * 17 + id * 13, 11);
+        if (isProceduralDecoration()) {
+            switch (id) {
+                case FLOWERS -> renderFlowers(gc, x, y, variation);
+                case FERN -> renderFern(gc, x, y, variation);
+                case ROCK -> renderRock(gc, x, y, variation);
+                case GRAVE -> renderGrave(gc, x, y, variation);
+                case PILLAR -> renderPillar(gc, x, y, variation);
+                case CRYSTAL -> renderCrystal(gc, x, y, variation);
+                case FENCE -> renderFence(gc, x, y, variation);
+                case WELL -> renderWell(gc, x, y, variation);
+                case BENCH -> renderBench(gc, x, y, variation);
+                default -> { }
+            }
+            return;
+        }
         Color base = fallbackColor();
         gc.setFill(base);
         gc.fillRect(x, y, SIZE, SIZE);
@@ -152,12 +176,165 @@ public class Tile {
             case TREE_BASE -> renderTreeTrunk(gc, x, y);
             case TREE_TOP -> renderTreeCanopy(gc, x, y, variation);
             case BRIDGE -> renderBridge(gc, x, y, variation);
+            case FLOWERS -> renderFlowers(gc, x, y, variation);
+            case FERN -> renderFern(gc, x, y, variation);
+            case ROCK -> renderRock(gc, x, y, variation);
+            case GRAVE -> renderGrave(gc, x, y, variation);
+            case PILLAR -> renderPillar(gc, x, y, variation);
+            case CRYSTAL -> renderCrystal(gc, x, y, variation);
+            case FENCE -> renderFence(gc, x, y, variation);
+            case WELL -> renderWell(gc, x, y, variation);
+            case BENCH -> renderBench(gc, x, y, variation);
             default -> renderStone(gc, x, y, variation);
         }
 
         gc.setStroke(TILE_EDGE);
         gc.setLineWidth(1);
         gc.strokeRect(x + 0.5, y + 0.5, SIZE - 1, SIZE - 1);
+    }
+
+    private boolean isProceduralDecoration() {
+        return id >= FLOWERS && id <= BENCH;
+    }
+
+    private void renderFlowers(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0, 0, 0, 0.18));
+        gc.fillOval(x + 5, y + 25, 22, 5);
+        Color[] petals = {Color.web("#f4d47b"), Color.web("#e9a6b0"),
+                Color.web("#c8b3e8"), Color.web("#f3eee0")};
+        for (int i = 0; i < 4; i++) {
+            double fx = x + 7 + i * 5 + (variation + i) % 3;
+            double fy = y + 10 + (variation * (i + 1)) % 10;
+            gc.setStroke(Color.web("#527d3d"));
+            gc.setLineWidth(1.5);
+            gc.strokeLine(fx + 2, fy + 5, fx + 2, fy + 13);
+            gc.setFill(petals[(variation + i) % petals.length]);
+            gc.fillOval(fx, fy, 5, 5);
+            gc.setFill(Color.web("#f8e9a1"));
+            gc.fillOval(fx + 1.5, fy + 1.5, 2, 2);
+        }
+    }
+
+    private void renderFern(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0, 0, 0, 0.18));
+        gc.fillOval(x + 3, y + 25, 26, 5);
+        gc.setStroke(Color.web("#355c35"));
+        gc.setLineWidth(2);
+        gc.strokeLine(x + 16, y + 28, x + 16, y + 9);
+        for (int i = 0; i < 4; i++) {
+            double yy = y + 12 + i * 4;
+            double spread = 5 + (variation + i) % 3;
+            gc.setFill(i % 2 == 0 ? Color.web("#5f9a4c") : Color.web("#77ad58"));
+            gc.fillOval(x + 16 - spread - 5, yy, 8, 4);
+            gc.fillOval(x + 16 + spread - 3, yy - 2, 8, 4);
+        }
+    }
+
+    private void renderRock(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0, 0, 0, 0.2));
+        gc.fillOval(x + 3, y + 23, 27, 7);
+        gc.setFill(Color.web("#4b5553"));
+        gc.fillPolygon(new double[]{x + 4, x + 8, x + 11, x + 17, x + 25, x + 29, x + 26, x + 7},
+                new double[]{y + 23, y + 12, y + 9, y + 13, y + 8, y + 18, y + 25, y + 27}, 8);
+        gc.setFill(Color.web("#77817b"));
+        gc.fillPolygon(new double[]{x + 8, x + 12, x + 17, x + 21, x + 14},
+                new double[]{y + 14, y + 10, y + 14, y + 18, y + 20}, 5);
+        gc.setStroke(Color.web("#a0a49a", 0.5));
+        gc.strokeLine(x + 10 + variation % 5, y + 14, x + 15, y + 18);
+    }
+
+    private void renderGrave(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0, 0, 0, 0.2));
+        gc.fillOval(x + 5, y + 25, 22, 5);
+        gc.setFill(Color.web("#53605c"));
+        gc.fillRoundRect(x + 7, y + 6, 18, 22, 8, 8);
+        gc.setFill(Color.web("#74817a"));
+        gc.fillRoundRect(x + 10, y + 8, 12, 17, 7, 7);
+        gc.setStroke(Color.web("#313a3a"));
+        gc.setLineWidth(2);
+        gc.strokeLine(x + 16, y + 12, x + 16, y + 21);
+        gc.strokeLine(x + 12, y + 15, x + 20, y + 15);
+        if (variation % 3 == 0) {
+            gc.setFill(Color.web("#b6c4a0", 0.65));
+            gc.fillOval(x + 7, y + 23, 7, 3);
+        }
+    }
+
+    private void renderPillar(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0, 0, 0, 0.22));
+        gc.fillOval(x + 3, y + 25, 27, 6);
+        gc.setFill(Color.web("#393d42"));
+        gc.fillRect(x + 7, y + 8, 18, 19);
+        gc.setFill(Color.web("#777b78"));
+        gc.fillPolygon(new double[]{x + 4, x + 8, x + 24, x + 28},
+                new double[]{y + 7, y + 3, y + 3, y + 7}, 4);
+        gc.fillPolygon(new double[]{x + 6, x + 26, x + 29, x + 3},
+                new double[]{y + 26, y + 26, y + 30, y + 30}, 4);
+        gc.setStroke(Color.web("#a7aaa0", 0.75));
+        gc.strokeLine(x + 10 + variation % 4, y + 9, x + 10 + variation % 4, y + 23);
+        gc.setStroke(Color.web("#272b31"));
+        gc.strokeLine(x + 20, y + 10 + variation % 5, x + 15, y + 16);
+        gc.strokeLine(x + 15, y + 16, x + 18, y + 21);
+    }
+
+    private void renderCrystal(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0.26, 0.77, 0.92, 0.13));
+        gc.fillOval(x - 2, y + 20, 36, 12);
+        gc.setFill(Color.web("#2c7184"));
+        gc.fillPolygon(new double[]{x + 5, x + 11, x + 14, x + 10, x + 5},
+                new double[]{y + 25, y + 5, y + 1, y + 20, y + 25}, 5);
+        gc.setFill(Color.web("#79d5e5"));
+        gc.fillPolygon(new double[]{x + 11, x + 18, x + 23, x + 20, x + 14},
+                new double[]{y + 25, y + 2, y + 8, y + 23, y + 27}, 5);
+        gc.setFill(Color.web("#c7f5f2", 0.8));
+        gc.fillPolygon(new double[]{x + 17, x + 20, x + 20},
+                new double[]{y + 6, y + 10, y + 20 + variation % 4}, 3);
+    }
+
+    private void renderFence(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0, 0, 0, 0.15));
+        gc.fillOval(x + 2, y + 24, 28, 5);
+        gc.setFill(Color.web("#60452e"));
+        gc.fillRect(x + 2, y + 10, 28, 4);
+        gc.fillRect(x + 2, y + 20, 28, 4);
+        for (int post = 0; post < 3; post++) {
+            int px = x + 4 + post * 11;
+            gc.fillPolygon(new double[]{px, px + 2, px + 4, px + 3, px + 1},
+                    new double[]{y + 25, y + 5 + (post + variation) % 3, y + 25, y + 28, y + 28}, 5);
+            gc.setFill(Color.web("#a5794d"));
+            gc.fillRect(px + 1, y + 12, 2, 2);
+            gc.setFill(Color.web("#60452e"));
+        }
+    }
+
+    private void renderWell(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0, 0, 0, 0.2));
+        gc.fillOval(x + 2, y + 24, 28, 6);
+        gc.setFill(Color.web("#6a7472"));
+        gc.fillOval(x + 4, y + 9, 24, 18);
+        gc.setFill(Color.web("#39484b"));
+        gc.fillOval(x + 8, y + 12, 16, 11);
+        gc.setFill(Color.web("#6db4bb", 0.8));
+        gc.fillOval(x + 10, y + 15 + variation % 3, 12, 6);
+        gc.setStroke(Color.web("#704d32"));
+        gc.setLineWidth(2);
+        gc.strokeLine(x + 6, y + 7, x + 6, y + 3);
+        gc.strokeLine(x + 26, y + 7, x + 26, y + 3);
+        gc.strokeLine(x + 6, y + 4, x + 26, y + 4);
+        gc.setStroke(Color.web("#c69a5e"));
+        gc.strokeLine(x + 16, y + 4, x + 16, y + 13);
+    }
+
+    private void renderBench(GraphicsContext gc, int x, int y, int variation) {
+        gc.setFill(Color.color(0, 0, 0, 0.2));
+        gc.fillOval(x + 3, y + 24, 26, 5);
+        gc.setFill(Color.web("#68472d"));
+        gc.fillRoundRect(x + 3, y + 10, 26, 8, 3, 3);
+        gc.fillRect(x + 6, y + 18, 3, 9);
+        gc.fillRect(x + 23, y + 18, 3, 9);
+        gc.setStroke(Color.web("#b08350"));
+        gc.setLineWidth(1);
+        gc.strokeLine(x + 6, y + 13 + variation % 2, x + 26, y + 13 + variation % 2);
     }
 
     private void renderGrass(GraphicsContext gc, int x, int y, int variation) {

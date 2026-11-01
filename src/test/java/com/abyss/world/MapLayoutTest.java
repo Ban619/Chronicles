@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MapLayoutTest {
 
@@ -48,5 +49,49 @@ class MapLayoutTest {
             assertFalse(arena.isBlocked(centerCol * Tile.SIZE, row * Tile.SIZE,
                     Tile.SIZE, Tile.SIZE), "north path should be clear at row " + row);
         }
+    }
+
+    @Test
+    void regionsHaveDistinctWalkableLandmarksAndStableLayouts() {
+        AssetLoader assets = AssetLoader.getInstance();
+        GameMap village = new GameMap("maps/world_map.json", assets);
+        GameMap forest = new GameMap("maps/thornwood_forest.json", assets);
+        GameMap crypt = new GameMap("maps/crypt_of_echoes.json", assets);
+        GameMap arena = new GameMap("maps/dragons_maw.json", assets);
+
+        assertTrue(countObjects(village, Tile.WELL) > 0, "village should place its central well");
+        assertTrue(countObjects(village, Tile.BENCH) > 0);
+        assertTrue(countObjects(village, Tile.FENCE) > 0);
+        assertTrue(countObjects(village, Tile.FLOWERS) > 0);
+        assertTrue(countObjects(forest, Tile.FERN) > 0);
+        assertTrue(countObjects(forest, Tile.ROCK) > 0);
+        assertTrue(countObjects(forest, Tile.CRYSTAL) >= 2);
+        assertTrue(countObjects(crypt, Tile.PILLAR) >= 4,
+                "crypt pillar count: " + countObjects(crypt, Tile.PILLAR));
+        assertTrue(countObjects(crypt, Tile.GRAVE) >= 2);
+        assertTrue(countObjects(arena, Tile.PILLAR) >= 4);
+        assertTrue(countObjects(arena, Tile.CRYSTAL) >= 4);
+
+        GameMap regeneratedVillage = new GameMap("maps/world_map.json", assets);
+        for (int row = 0; row < village.getRows(); row++) {
+            for (int col = 0; col < village.getCols(); col++) {
+                assertEquals(village.getObjectTileId(row, col),
+                        regeneratedVillage.getObjectTileId(row, col));
+            }
+        }
+    }
+
+    private int countObjects(GameMap map, int tileId) {
+        int count = 0;
+        for (int row = 0; row < map.getRows(); row++) {
+            for (int col = 0; col < map.getCols(); col++) {
+                if (map.getObjectTileId(row, col) == tileId) {
+                    count++;
+                    assertTrue(new Tile(tileId).isWalkable(),
+                            "decoration should remain walkable: " + tileId);
+                }
+            }
+        }
+        return count;
     }
 }

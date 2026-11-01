@@ -56,7 +56,7 @@ public class GameMap {
     public GameMap(String mapPath, AssetLoader loader) {
         this.assetLoader = loader;
         this.tileset     = loader.getImage("tiles/tileset.png");
-        this.layoutRandom = new Random(System.nanoTime() ^ mapPath.hashCode());
+        this.layoutRandom = new Random(0x5EEDC0DEL ^ mapPath.hashCode());
         int[] dims = loader.getMapDimensions(mapPath);
         this.cols = dims[0]; this.rows = dims[1];
         this.tileCache = new Tile[rows][cols];
@@ -114,15 +114,29 @@ public class GameMap {
         for (int r = mid - 4; r <= mid + 4; r++) objectLayer[r][cols - 1] = 0;
         paintPath(6, mid - 8, 17, mid - 5, Tile.FLOOR_STONE);
         paintPath(18, mid - 6, 25, mid - 3, Tile.FLOOR_STONE);
+        placeHouse(cols / 2 - 7, 3, 7, 5);
+        placeHouse(cols / 2 + 13, rows - 10, 7, 5);
+        paintPath(cols / 2 - 4, 8, cols / 2 - 4, mid - 5, Tile.DIRT);
+        paintPath(cols / 2 + 14, mid - 2, cols / 2 + 14, rows - 13, Tile.DIRT);
+        paintPath(cols / 2 + 14, rows - 12, cols / 2 + 20, rows - 12, Tile.DIRT);
+        paintPath(cols / 2 + 16, rows - 12, cols / 2 + 16, rows - 7, Tile.DIRT);
+        paintPath(cols / 2 + 20, mid - 2, cols - 6, mid - 2, Tile.DIRT);
+        paintPath(cols - 6, 7, cols - 6, mid - 2, Tile.DIRT);
 
         int[][] trees = {{3,3},{4,3},{8,2},{9,2},{cols-4,3},{cols-5,4},{2,rows-3},{cols-3,rows-4}};
         for (int[] t : trees) {
             if (inBounds(t[1],t[0])) { objectLayer[t[1]][t[0]]=Tile.TREE_BASE; if(inBounds(t[1]-1,t[0])) overlayLayer[t[1]-1][t[0]]=Tile.TREE_TOP; }
         }
         placeHouse(2,rows-9,5,4); placeHouse(cols-8,3,5,4);
+        paintPath(4, rows - 5, cols / 2, rows - 5, Tile.DIRT);
         objectLayer[rows-9][2]=Tile.TORCH; objectLayer[rows-9][6]=Tile.TORCH;
         objectLayer[3][cols-8]=Tile.TORCH; objectLayer[3][cols-4]=Tile.TORCH;
         objectLayer[4][cols-6]=Tile.CHEST; objectLayer[rows-6][4]=Tile.CHEST;
+        placeDecoration(cols / 2 + 5, mid - 5, Tile.WELL);
+        placeDecoration(21, mid - 6, Tile.BENCH);
+        scatterDecorations(Tile.FLOWERS, Tile.GRASS, 0.045, 4, 4);
+        placeFence(7, rows - 13, 14, rows - 11, true);
+        for (int c = 8; c <= 13; c += 2) placeDecoration(c, rows - 12, Tile.FLOWERS);
         startX=7*Tile.SIZE; startY=(mid-4)*Tile.SIZE;
     }
 
@@ -171,9 +185,18 @@ public class GameMap {
         int streamCol = Math.max(pathCol + 5, cols - 4 - rng.nextInt(4));
         int streamStart = rows / 4 + rng.nextInt(Math.max(1, rows / 10));
         int streamEnd = Math.min(rows - 1, rows * 3 / 4 + rng.nextInt(Math.max(1, rows / 10)));
-        for (int r=streamStart;r<streamEnd;r++) {
-            groundLayer[r][streamCol]=Tile.WATER;
-            if (streamCol > 0) groundLayer[r][streamCol-1]=Tile.WATER;
+        int streamCenter = streamCol;
+        for (int r = streamStart; r < streamEnd; r++) {
+            if (r % 5 == 0) streamCenter += rng.nextBoolean() ? 1 : -1;
+            streamCenter = Math.max(pathCol + 4, Math.min(cols - 3, streamCenter));
+            for (int dc = -1; dc <= 0; dc++) {
+                int waterCol = streamCenter + dc;
+                groundLayer[r][waterCol] = Tile.WATER;
+                if (inBounds(r, waterCol - 1) && groundLayer[r][waterCol - 1] != Tile.DIRT)
+                    groundLayer[r][waterCol - 1] = Tile.SAND;
+                if (inBounds(r, waterCol + 1) && groundLayer[r][waterCol + 1] != Tile.DIRT)
+                    groundLayer[r][waterCol + 1] = Tile.SAND;
+            }
         }
         // Stone ruins cluster
         int ruinRow = Math.min(rows - 9, rows / 2 + 5);
@@ -188,6 +211,12 @@ public class GameMap {
             if (inBounds(r, ruinCol)) objectLayer[r][ruinCol] = Tile.WALL_STONE;
             if (inBounds(r, ruinCol + 8)) objectLayer[r][ruinCol + 8] = Tile.WALL_STONE;
         }
+        scatterDecorations(Tile.FERN, Tile.GRASS, 0.035, 3, 3);
+        scatterDecorations(Tile.ROCK, Tile.GRASS, 0.018, 3, 3);
+        placeDecoration(ruinCol + 2, ruinRow + 2, Tile.GRAVE);
+        placeDecoration(ruinCol + 6, ruinRow + 2, Tile.GRAVE);
+        placeDecoration(pathCol + 9, rows / 2 - 7, Tile.CRYSTAL);
+        placeDecoration(pathCol + 11, rows / 2 - 6, Tile.CRYSTAL);
         startX = pathCol * Tile.SIZE;
         startY = 2 * Tile.SIZE;
     }
@@ -223,6 +252,14 @@ public class GameMap {
         relicCol = 20 * sx;
         relicRow = 24 * sy;
         if (inBounds(relicRow, relicCol)) objectLayer[relicRow][relicCol] = Tile.CHEST;
+        placeDecoration(18 * sx, 14 * sy, Tile.PILLAR);
+        placeDecoration(24 * sx, 14 * sy, Tile.PILLAR);
+        placeDecoration(16 * sx, 17 * sy, Tile.PILLAR);
+        placeDecoration(24 * sx, 17 * sy, Tile.PILLAR);
+        placeDecoration(4 * sx, 16 * sy, Tile.GRAVE);
+        placeDecoration(9 * sx, 16 * sy, Tile.GRAVE);
+        placeDecoration(18 * sx, 24 * sy, Tile.CRYSTAL);
+        placeDecoration(22 * sx, 24 * sy, Tile.CRYSTAL);
         startX=5*sx*Tile.SIZE; startY=4*sy*Tile.SIZE;
     }
 
@@ -260,9 +297,47 @@ public class GameMap {
             int pr=(int)(cy+(radius-2)*Math.sin(Math.toRadians(angle)));
             if (inBounds(pr,pc)) objectLayer[pr][pc]=Tile.TORCH;
         }
+        for (int angle = 0; angle < 360; angle += 45) {
+            int pc = (int) (cx + (radius - 7) * Math.cos(Math.toRadians(angle)));
+            int pr = (int) (cy + (radius - 7) * Math.sin(Math.toRadians(angle)));
+            placeDecoration(pc, pr, Tile.PILLAR);
+        }
+        placeDecoration(cx - 8, cy - 3, Tile.CRYSTAL);
+        placeDecoration(cx + 8, cy - 3, Tile.CRYSTAL);
+        placeDecoration(cx - 8, cy + 3, Tile.CRYSTAL);
+        placeDecoration(cx + 8, cy + 3, Tile.CRYSTAL);
         // Entrance corridor north
         for (int r=0;r<cy-radius+1;r++) { if(inBounds(r,cx)) objectLayer[r][cx]=0; if(inBounds(r,cx+1)) objectLayer[r][cx+1]=0; }
         startX=cx*Tile.SIZE; startY=(cy+radius-3)*Tile.SIZE;
+    }
+
+    private void placeDecoration(int col, int row, int tileId) {
+        if (!inBounds(row, col) || objectLayer[row][col] != 0) return;
+        if (groundLayer[row][col] == Tile.WATER || groundLayer[row][col] == Tile.LAVA) return;
+        objectLayer[row][col] = tileId;
+    }
+
+    private void scatterDecorations(int tileId, int groundId, double chance,
+                                    int marginX, int marginY) {
+        for (int row = marginY; row < rows - marginY; row++) {
+            for (int col = marginX; col < cols - marginX; col++) {
+                if (objectLayer[row][col] != 0 || groundLayer[row][col] != groundId
+                        || layoutRandom.nextDouble() >= chance) continue;
+                objectLayer[row][col] = tileId;
+            }
+        }
+    }
+
+    private void placeFence(int left, int top, int right, int bottom, boolean gateOnBottom) {
+        for (int col = left; col <= right; col++) {
+            placeDecoration(col, top, Tile.FENCE);
+            if (!gateOnBottom || col != (left + right) / 2)
+                placeDecoration(col, bottom, Tile.FENCE);
+        }
+        for (int row = top + 1; row < bottom; row++) {
+            placeDecoration(left, row, Tile.FENCE);
+            placeDecoration(right, row, Tile.FENCE);
+        }
     }
 
     // ── Tile helpers ──────────────────────────────────────────────────────
@@ -778,6 +853,8 @@ public class GameMap {
                         gc.fillOval(x + 21 - mark % 5, y + 8 + mark % 3, 1.5, 1.5);
                     }
                 } else if (tileId == Tile.GRASS && mark < 9) {
+                    gc.setStroke(Color.color(0.52, 0.78, 0.35, 0.65));
+                    gc.setLineWidth(1);
                     gc.setFill(Color.color(0.52, 0.78, 0.35, 0.48));
                     gc.strokeLine(x + 8 + mark, y + 23, x + 7 + mark, y + 18);
                     gc.strokeLine(x + 10 + mark, y + 23, x + 12 + mark, y + 17);
