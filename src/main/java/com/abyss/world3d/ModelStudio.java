@@ -24,6 +24,7 @@ import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
@@ -51,12 +52,15 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 
 /** JavaFX primitive-model editor for creating props used by the 3D map renderer. */
 public final class ModelStudio {
     private static final Path COMPONENT_DIRECTORY = Path.of("engine", "components");
+    private static final int MAX_HISTORY = 100;
     private static Stage activeStage;
 
     private final Perspective3DEngine engine;
@@ -83,6 +87,10 @@ public final class ModelStudio {
     private final Label brushRadiusLabel = new Label("Brush radius: 24");
     private final Label statusLabel = new Label("Ready");
     private final ObservableList<CustomModelDefinition.Part> parts = FXCollections.observableArrayList();
+    private final Deque<EditorSnapshot> undoHistory = new ArrayDeque<>();
+    private final Deque<EditorSnapshot> redoHistory = new ArrayDeque<>();
+    private final MenuItem undoMenuItem = new MenuItem("Undo");
+    private final MenuItem redoMenuItem = new MenuItem("Redo");
     private final Rotate yaw = new Rotate(-25, Rotate.Y_AXIS);
     private final Rotate pitch = new Rotate(-18, Rotate.X_AXIS);
     private double dragX;
@@ -91,6 +99,7 @@ public final class ModelStudio {
     private Path currentFile;
     private int nextPartNumber = 1;
     private boolean syncingInspector;
+    private boolean restoringHistory;
     private boolean viewportOnly;
     private boolean inspectorOpen = true;
     private double toolboxDividerPosition = 0.17;
@@ -103,6 +112,8 @@ public final class ModelStudio {
     private VBox inspector;
     private VBox toolbox;
     private HBox ribbonCommands;
+    private Button undoRibbonButton;
+    private Button redoRibbonButton;
     private String activeRibbon = "Home";
 
     private ModelStudio(Perspective3DEngine engine) {
@@ -151,6 +162,13 @@ public final class ModelStudio {
                 if (event.isShiftDown()) saveComponent();
                 else saveModel();
                 event.consume();
+            } else if (event.isControlDown()
+                    && (event.getCode() == javafx.scene.input.KeyCode.Z
+                    || event.getCode() == javafx.scene.input.KeyCode.Y)
+                    && !(scene.getFocusOwner() instanceof TextField)) {
+                if (event.getCode() == javafx.scene.input.KeyCode.Y || event.isShiftDown()) redo();
+                else undo();
+                event.consume();
             } else if (event.isControlDown() && event.getCode() == javafx.scene.input.KeyCode.O) {
                 openModel();
                 event.consume();
@@ -183,11 +201,15 @@ public final class ModelStudio {
         file.getItems().addAll(open, save, saveComponent);
 
         Menu edit = new Menu("Edit");
+        undoMenuItem.setOnAction(event -> undo());
+        redoMenuItem.setOnAction(event -> redo());
+        undoMenuItem.setDisable(true);
+        redoMenuItem.setDisable(true);
         MenuItem duplicate = new MenuItem("Duplicate component");
         duplicate.setOnAction(event -> duplicateSelectedPart());
         MenuItem remove = new MenuItem("Remove component");
         remove.setOnAction(event -> removeSelectedPart());
-        edit.getItems().addAll(duplicate, remove);
+        edit.getItems().addAll(undoMenuItem, redoMenuItem, new SeparatorMenuItem(), duplicate, remove);
 
         Menu view = new Menu("View");
         MenuItem expand = new MenuItem("Toggle expanded viewport");
@@ -271,6 +293,10 @@ public final class ModelStudio {
                 ribbonCommands.getChildren().addAll(importButton, refreshButton, saveButton);
             }
             default -> {
+                undoRibbonButton = new Button("Undo");
+                undoRibbonButton.setOnAction(event -> undo());
+                redoRibbonButton = new Button("Redo");
+                redoRibbonButton.setOnAction(event -> redo());
                 Button openButton = new Button("Open model");
                 openButton.setOnAction(event -> openModel());
                 Button saveButton = new Button("Save model");
@@ -279,12 +305,14 @@ public final class ModelStudio {
                 duplicateButton.setOnAction(event -> duplicateSelectedPart());
                 Button removeButton = new Button("Remove");
                 removeButton.setOnAction(event -> removeSelectedPart());
-                ribbonCommands.getChildren().addAll(openButton, saveButton, saveComponentButton(),
+                ribbonCommands.getChildren().addAll(undoRibbonButton, redoRibbonButton,
+                        openButton, saveButton, saveComponentButton(),
                         duplicateButton, removeButton);
             }
         }
         ribbonCommands.getChildren().forEach(node -> node.setStyle(
                 "-fx-background-color: #394245; -fx-text-fill: #e2e7e3; -fx-border-color: #586365;"));
+        updateHistoryActions();
     }
 
     private Button saveComponentButton() {
@@ -395,37 +423,39 @@ public final class ModelStudio {
     }
 
     private void generateLantern() {
-        parts.clear();
-        CustomModelDefinition.Part base = newPart("CYLINDER");
-        base.name = "Lantern Base";
-        base.y = 4;
-        base.width = 22;
-        base.height = 5;
-        base.depth = 22;
-        base.material = "IRON";
-        base.color = SemanticMaterial.IRON.baseColor();
-        CustomModelDefinition.Part glass = newPart("CYLINDER");
-        glass.name = "Glowing Glass";
-        glass.height = 18;
-        glass.width = 14;
-        glass.depth = 14;
-        glass.material = "GLASS";
-        glass.finish = "EMISSIVE";
-        glass.color = SemanticMaterial.FLAME.baseColor();
-        CustomModelDefinition.Part cap = newPart("CONE");
-        cap.name = "Lantern Cap";
-        cap.y = -13;
-        cap.width = 20;
-        cap.height = 9;
-        cap.depth = 20;
-        cap.material = "IRON";
-        cap.color = SemanticMaterial.IRON.baseColor();
-        parts.addAll(base, glass, cap);
-        modelName.setText("Lantern");
-        tilePicker.getSelectionModel().selectFirst();
-        refreshPartList(1);
-        refreshPreview();
-        statusLabel.setText("Generated a three-part lantern model");
+        performEdit(() -> {
+            parts.clear();
+            CustomModelDefinition.Part base = newPart("CYLINDER");
+            base.name = "Lantern Base";
+            base.y = 4;
+            base.width = 22;
+            base.height = 5;
+            base.depth = 22;
+            base.material = "IRON";
+            base.color = SemanticMaterial.IRON.baseColor();
+            CustomModelDefinition.Part glass = newPart("CYLINDER");
+            glass.name = "Glowing Glass";
+            glass.height = 18;
+            glass.width = 14;
+            glass.depth = 14;
+            glass.material = "GLASS";
+            glass.finish = "EMISSIVE";
+            glass.color = SemanticMaterial.FLAME.baseColor();
+            CustomModelDefinition.Part cap = newPart("CONE");
+            cap.name = "Lantern Cap";
+            cap.y = -13;
+            cap.width = 20;
+            cap.height = 9;
+            cap.depth = 20;
+            cap.material = "IRON";
+            cap.color = SemanticMaterial.IRON.baseColor();
+            parts.addAll(base, glass, cap);
+            modelName.setText("Lantern");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(1);
+            refreshPreview();
+            statusLabel.setText("Generated a three-part lantern model");
+        });
     }
 
     private void clearModel() {
@@ -436,10 +466,12 @@ public final class ModelStudio {
         confirm.initOwner(stage);
         if (confirm.showAndWait().orElse(javafx.scene.control.ButtonType.CANCEL)
                 != javafx.scene.control.ButtonType.OK) return;
-        parts.clear();
-        refreshPartList(-1);
-        refreshPreview();
-        statusLabel.setText("Model cleared");
+        performEdit(() -> {
+            parts.clear();
+            refreshPartList(-1);
+            refreshPreview();
+            statusLabel.setText("Model cleared");
+        });
     }
 
     private void refreshTemplates() {
@@ -677,40 +709,52 @@ public final class ModelStudio {
 
         Button apply = new Button("Apply part changes");
         apply.setMaxWidth(Double.MAX_VALUE);
-        apply.setOnAction(event -> { applyFields(); refreshPreview(); refreshPartList(partList.getSelectionModel().getSelectedIndex()); });
+        apply.setOnAction(event -> performEdit(() -> {
+            applyFields();
+            refreshPreview();
+            refreshPartList(partList.getSelectionModel().getSelectedIndex());
+        }));
 
         colorPicker.setMaxWidth(Double.MAX_VALUE);
         colorPicker.setOnAction(event -> {
             if (syncingInspector) return;
             CustomModelDefinition.Part selected = partList.getSelectionModel().getSelectedItem();
             if (selected != null) {
-                selected.color = colorPicker.getValue().toString();
-                refreshPreview();
+                performEdit(() -> {
+                    selected.color = colorPicker.getValue().toString();
+                    refreshPreview();
+                });
             }
         });
         partName.textProperty().addListener((obs, oldName, newName) -> {
             if (syncingInspector) return;
             CustomModelDefinition.Part selected = partList.getSelectionModel().getSelectedItem();
             if (selected != null && !newName.isBlank()) {
-                selected.name = newName;
-                partList.refresh();
+                performEdit(() -> {
+                    selected.name = newName;
+                    partList.refresh();
+                });
             }
         });
         shapePicker.setOnAction(event -> {
             if (syncingInspector) return;
             CustomModelDefinition.Part selected = partList.getSelectionModel().getSelectedItem();
             if (selected != null && shapePicker.getValue() != null) {
-                selected.shape = shapePicker.getValue();
-                refreshPartList(partList.getSelectionModel().getSelectedIndex());
-                refreshPreview();
+                performEdit(() -> {
+                    selected.shape = shapePicker.getValue();
+                    refreshPartList(partList.getSelectionModel().getSelectedIndex());
+                    refreshPreview();
+                });
             }
         });
         finishPicker.setOnAction(event -> {
             if (syncingInspector) return;
             CustomModelDefinition.Part selected = partList.getSelectionModel().getSelectedItem();
             if (selected != null && finishPicker.getValue() != null) {
-                selected.finish = finishPicker.getValue();
-                refreshPreview();
+                performEdit(() -> {
+                    selected.finish = finishPicker.getValue();
+                    refreshPreview();
+                });
             }
         });
         brushToggle.setOnAction(event -> {
@@ -796,11 +840,13 @@ public final class ModelStudio {
     }
 
     private void addPart(String shape) {
-        applyFields();
-        CustomModelDefinition.Part part = newPart(shape);
-        parts.add(part);
-        refreshPartList(parts.size() - 1);
-        refreshPreview();
+        performEdit(() -> {
+            applyFields();
+            CustomModelDefinition.Part part = newPart(shape);
+            parts.add(part);
+            refreshPartList(parts.size() - 1);
+            refreshPreview();
+        });
     }
 
     private CustomModelDefinition.Part newPart(String shape) {
@@ -828,27 +874,31 @@ public final class ModelStudio {
     }
 
     private void duplicateSelectedPart() {
-        applyFields();
         int index = partList.getSelectionModel().getSelectedIndex();
         if (index < 0 || index >= parts.size()) return;
-        CustomModelDefinition.Part copy = copyPart(parts.get(index));
-        copy.name = parts.get(index).name + " Copy";
-        copy.x += 4;
-        copy.z += 4;
-        parts.add(index + 1, copy);
-        refreshPartList(index + 1);
-        refreshPreview();
+        performEdit(() -> {
+            applyFields();
+            CustomModelDefinition.Part copy = copyPart(parts.get(index));
+            copy.name = parts.get(index).name + " Copy";
+            copy.x += 4;
+            copy.z += 4;
+            parts.add(index + 1, copy);
+            refreshPartList(index + 1);
+            refreshPreview();
+        });
     }
 
     private void moveSelectedPart(int offset) {
-        applyFields();
         int index = partList.getSelectionModel().getSelectedIndex();
         int target = index + offset;
         if (index < 0 || target < 0 || target >= parts.size()) return;
-        CustomModelDefinition.Part part = parts.remove(index);
-        parts.add(target, part);
-        refreshPartList(target);
-        refreshPreview();
+        performEdit(() -> {
+            applyFields();
+            CustomModelDefinition.Part part = parts.remove(index);
+            parts.add(target, part);
+            refreshPartList(target);
+            refreshPreview();
+        });
     }
 
     private void applySemanticMaterial() {
@@ -856,23 +906,27 @@ public final class ModelStudio {
         CustomModelDefinition.Part part = partList.getSelectionModel().getSelectedItem();
         String preset = materialPicker.getValue();
         if (part == null || preset == null) return;
-        SemanticMaterial semanticMaterial = SemanticMaterial.from(preset);
-        part.material = semanticMaterial.name();
-        if (semanticMaterial != SemanticMaterial.CUSTOM) {
-            part.color = semanticMaterial.baseColor();
-            part.finish = semanticMaterial.defaultFinish();
-            finishPicker.setValue(part.finish);
-        }
-        showPart(part);
-        refreshPreview();
+        performEdit(() -> {
+            SemanticMaterial semanticMaterial = SemanticMaterial.from(preset);
+            part.material = semanticMaterial.name();
+            if (semanticMaterial != SemanticMaterial.CUSTOM) {
+                part.color = semanticMaterial.baseColor();
+                part.finish = semanticMaterial.defaultFinish();
+                finishPicker.setValue(part.finish);
+            }
+            showPart(part);
+            refreshPreview();
+        });
     }
 
     private void removeSelectedPart() {
         int index = partList.getSelectionModel().getSelectedIndex();
         if (index < 0 || index >= parts.size()) return;
-        parts.remove(index);
-        refreshPartList(Math.min(index, parts.size() - 1));
-        refreshPreview();
+        performEdit(() -> {
+            parts.remove(index);
+            refreshPartList(Math.min(index, parts.size() - 1));
+            refreshPreview();
+        });
     }
 
     private void refreshPartList(int selectedIndex) {
@@ -945,27 +999,29 @@ public final class ModelStudio {
             return;
         }
 
-        double radius = brushRadius.getValue();
-        String color = colorPicker.getValue().toString();
-        SemanticMaterial semanticMaterial = SemanticMaterial.from(materialPicker.getValue());
-        String material = semanticMaterial.name();
-        String finish = finishPicker.getValue() == null
-                ? semanticMaterial.defaultFinish() : finishPicker.getValue();
-        int painted = 0;
-        for (CustomModelDefinition.Part part : parts) {
-            double dx = part.x - target.x;
-            double dy = part.y - target.y;
-            double dz = part.z - target.z;
-            if (part == target || dx * dx + dy * dy + dz * dz <= radius * radius) {
-                part.color = color;
-                part.material = material;
-                part.finish = finish;
-                painted++;
+        performEdit(() -> {
+            double radius = brushRadius.getValue();
+            String color = colorPicker.getValue().toString();
+            SemanticMaterial semanticMaterial = SemanticMaterial.from(materialPicker.getValue());
+            String material = semanticMaterial.name();
+            String finish = finishPicker.getValue() == null
+                    ? semanticMaterial.defaultFinish() : finishPicker.getValue();
+            int painted = 0;
+            for (CustomModelDefinition.Part part : parts) {
+                double dx = part.x - target.x;
+                double dy = part.y - target.y;
+                double dz = part.z - target.z;
+                if (part == target || dx * dx + dy * dy + dz * dz <= radius * radius) {
+                    part.color = color;
+                    part.material = material;
+                    part.finish = finish;
+                    painted++;
+                }
             }
-        }
-        showPart(target);
-        refreshPreview();
-        statusLabel.setText("Painted " + painted + " component(s) with " + color);
+            showPart(target);
+            refreshPreview();
+            statusLabel.setText("Painted " + painted + " component(s) with " + color);
+        });
     }
 
     private void importTemplate(Path path) {
@@ -975,16 +1031,18 @@ public final class ModelStudio {
                 statusLabel.setText("Template contains no components");
                 return;
             }
-            int firstAdded = parts.size();
-            for (CustomModelDefinition.Part source : template.parts) {
-                CustomModelDefinition.Part copy = copyPart(source);
-                copy.name = template.name + " / " + source.name;
-                parts.add(copy);
-            }
-            nextPartNumber = parts.size() + 1;
-            refreshPartList(firstAdded);
-            refreshPreview();
-            statusLabel.setText("Added template: " + template.name);
+            performEdit(() -> {
+                int firstAdded = parts.size();
+                for (CustomModelDefinition.Part source : template.parts) {
+                    CustomModelDefinition.Part copy = copyPart(source);
+                    copy.name = template.name + " / " + source.name;
+                    parts.add(copy);
+                }
+                nextPartNumber = parts.size() + 1;
+                refreshPartList(firstAdded);
+                refreshPreview();
+                statusLabel.setText("Added template: " + template.name);
+            });
         } catch (IOException ex) {
             throw new IllegalArgumentException(ex.getMessage(), ex);
         }
@@ -1031,21 +1089,23 @@ public final class ModelStudio {
         if (selected == null) return;
         try {
             CustomModelDefinition loaded = CustomModelLibrary.read(selected.toPath());
-            definition.name = loaded.name;
-            definition.tileId = loaded.tileId;
-            parts.clear();
-            parts.addAll(loaded.parts);
-            modelName.setText(definition.name);
-            for (TileOption option : tilePicker.getItems()) {
-                if (option.id == definition.tileId) {
-                    tilePicker.getSelectionModel().select(option);
-                    break;
+            performEdit(() -> {
+                definition.name = loaded.name;
+                definition.tileId = loaded.tileId;
+                parts.clear();
+                parts.addAll(loaded.parts);
+                modelName.setText(definition.name);
+                for (TileOption option : tilePicker.getItems()) {
+                    if (option.id == definition.tileId) {
+                        tilePicker.getSelectionModel().select(option);
+                        break;
+                    }
                 }
-            }
-            currentFile = selected.toPath();
-            nextPartNumber = parts.size() + 1;
-            refreshPartList(parts.isEmpty() ? -1 : 0);
-            refreshPreview();
+                currentFile = selected.toPath();
+                nextPartNumber = parts.size() + 1;
+                refreshPartList(parts.isEmpty() ? -1 : 0);
+                refreshPreview();
+            });
         } catch (IOException ex) {
             error("Could not open model", ex.getMessage());
         }
@@ -1090,16 +1150,18 @@ public final class ModelStudio {
         if (selected == null) return;
         try {
             CustomModelDefinition component = CustomModelLibrary.read(selected.toPath());
-            int firstAdded = parts.size();
-            for (CustomModelDefinition.Part source : component.parts) {
-                CustomModelDefinition.Part copy = copyPart(source);
-                copy.name = component.name + " / " + source.name;
-                parts.add(copy);
-            }
-            nextPartNumber = parts.size() + 1;
-            refreshPartList(firstAdded);
-            refreshPreview();
-            modelName.requestFocus();
+            performEdit(() -> {
+                int firstAdded = parts.size();
+                for (CustomModelDefinition.Part source : component.parts) {
+                    CustomModelDefinition.Part copy = copyPart(source);
+                    copy.name = component.name + " / " + source.name;
+                    parts.add(copy);
+                }
+                nextPartNumber = parts.size() + 1;
+                refreshPartList(firstAdded);
+                refreshPreview();
+                modelName.requestFocus();
+            });
         } catch (IOException ex) {
             error("Could not add component", ex.getMessage());
         }
@@ -1123,6 +1185,103 @@ public final class ModelStudio {
         copy.finish = source.finish;
         return copy;
     }
+
+    private void performEdit(Runnable edit) {
+        if (restoringHistory) {
+            edit.run();
+            return;
+        }
+        EditorSnapshot before = snapshot();
+        edit.run();
+        if (sameModel(before, snapshot())) return;
+        undoHistory.push(before);
+        if (undoHistory.size() > MAX_HISTORY) undoHistory.removeLast();
+        redoHistory.clear();
+        updateHistoryActions();
+    }
+
+    private EditorSnapshot snapshot() {
+        List<CustomModelDefinition.Part> copies = parts.stream().map(this::copyPart).toList();
+        TileOption selectedTile = tilePicker.getValue();
+        return new EditorSnapshot(modelName.getText(), selectedTile == null ? 0 : selectedTile.id,
+                currentFile, copies, partList.getSelectionModel().getSelectedIndex());
+    }
+
+    private boolean sameModel(EditorSnapshot left, EditorSnapshot right) {
+        if (!java.util.Objects.equals(left.name, right.name) || left.tileId != right.tileId
+                || !java.util.Objects.equals(left.currentFile, right.currentFile)
+                || left.selectedIndex != right.selectedIndex || left.parts.size() != right.parts.size()) {
+            return false;
+        }
+        for (int i = 0; i < left.parts.size(); i++) {
+            CustomModelDefinition.Part a = left.parts.get(i);
+            CustomModelDefinition.Part b = right.parts.get(i);
+            if (!java.util.Objects.equals(a.name, b.name)
+                    || !java.util.Objects.equals(a.shape, b.shape)
+                    || Double.compare(a.x, b.x) != 0 || Double.compare(a.y, b.y) != 0
+                    || Double.compare(a.z, b.z) != 0 || Double.compare(a.width, b.width) != 0
+                    || Double.compare(a.height, b.height) != 0 || Double.compare(a.depth, b.depth) != 0
+                    || Double.compare(a.rotateX, b.rotateX) != 0
+                    || Double.compare(a.rotateY, b.rotateY) != 0
+                    || Double.compare(a.rotateZ, b.rotateZ) != 0
+                    || !java.util.Objects.equals(a.color, b.color)
+                    || !java.util.Objects.equals(a.material, b.material)
+                    || !java.util.Objects.equals(a.finish, b.finish)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void undo() {
+        if (undoHistory.isEmpty()) return;
+        redoHistory.push(snapshot());
+        restore(undoHistory.pop());
+        statusLabel.setText("Undo");
+    }
+
+    private void redo() {
+        if (redoHistory.isEmpty()) return;
+        undoHistory.push(snapshot());
+        restore(redoHistory.pop());
+        statusLabel.setText("Redo");
+    }
+
+    private void restore(EditorSnapshot snapshot) {
+        restoringHistory = true;
+        try {
+            parts.clear();
+            snapshot.parts.stream().map(this::copyPart).forEach(parts::add);
+            modelName.setText(snapshot.name);
+            definition.name = snapshot.name;
+            definition.tileId = snapshot.tileId;
+            currentFile = snapshot.currentFile;
+            for (TileOption option : tilePicker.getItems()) {
+                if (option.id == snapshot.tileId) {
+                    tilePicker.getSelectionModel().select(option);
+                    break;
+                }
+            }
+            nextPartNumber = parts.size() + 1;
+            refreshPartList(snapshot.selectedIndex);
+            refreshPreview();
+        } finally {
+            restoringHistory = false;
+        }
+        updateHistoryActions();
+    }
+
+    private void updateHistoryActions() {
+        boolean canUndo = !undoHistory.isEmpty();
+        boolean canRedo = !redoHistory.isEmpty();
+        if (undoMenuItem != null) undoMenuItem.setDisable(!canUndo);
+        if (redoMenuItem != null) redoMenuItem.setDisable(!canRedo);
+        if (undoRibbonButton != null) undoRibbonButton.setDisable(!canUndo);
+        if (redoRibbonButton != null) redoRibbonButton.setDisable(!canRedo);
+    }
+
+    private record EditorSnapshot(String name, int tileId, Path currentFile,
+                                  List<CustomModelDefinition.Part> parts, int selectedIndex) { }
 
     private List<TileOption> tileOptions() {
         return List.of(new TileOption("Preview only", 0),

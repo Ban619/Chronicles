@@ -113,6 +113,7 @@ java -jar target/chronicles-of-the-abyss-1.0.0-shaded.jar
 | `Tab` | Switch inventory tabs |
 | `Ctrl+S` / `Ctrl+Shift+S` | Save model / save reusable component in Model Studio |
 | `Ctrl+O` / `Ctrl+D` / `Delete` | Open model / duplicate / remove selected Studio part |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / redo Studio edits when a text field is not focused |
 | `Esc` | Back / Close menu |
 | `F5` | Quick-save (slot 1) |
 | `F9` | Quick-load (slot 1) |
@@ -121,7 +122,7 @@ Press `E` near Elder Aldric to accept or advance the chapter quest. Only defeate
 
 Combine two movement keys for diagonal movement. In close-up perspective, the hero faces movement in eight compass directions, including northeast and southwest; mouse-look continues to rotate the camera freely. The 2D sprite sheet has four facing rows, so diagonal facing uses the nearest cardinal sprite.
 
-In the Model Studio, `Ctrl+S` saves a tile model, `Ctrl+Shift+S` saves a reusable component, `Ctrl+O` opens a model, `Ctrl+D` duplicates the selected part, and `Delete` removes it when a text field is not focused.
+In the Model Studio, `Ctrl+S` saves a tile model, `Ctrl+Shift+S` saves a reusable component, `Ctrl+O` opens a model, `Ctrl+D` duplicates the selected part, and `Delete` removes it when a text field is not focused. `Ctrl+Z` and `Ctrl+Y` undo and redo edits; the same commands are available in the Edit menu and Home ribbon. Studio history retains up to 100 model edits per session.
 
 ### Mobile (Touch)
 | Gesture | Action |
