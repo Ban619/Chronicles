@@ -213,6 +213,10 @@ public final class ModelStudio {
                     && !(scene.getFocusOwner() instanceof javafx.scene.control.TextInputControl)) {
                 selectVisibleParts();
                 event.consume();
+            } else if (event.isControlDown() && event.getCode() == javafx.scene.input.KeyCode.I
+                    && !(scene.getFocusOwner() instanceof javafx.scene.control.TextInputControl)) {
+                invertVisibleSelection();
+                event.consume();
             } else if (event.isControlDown() && event.getCode() == javafx.scene.input.KeyCode.S) {
                 if (event.isShiftDown()) saveComponent();
                 else saveModel();
@@ -1061,7 +1065,7 @@ public final class ModelStudio {
             event.consume();
         });
 
-        Label hint = new Label("Ctrl+A selects visible Outliner rows · Shift-click/box-drag adds · Middle-drag orbits · Shift+middle-drag pans");
+        Label hint = new Label("Ctrl+A selects · Ctrl+I inverts visible Outliner rows · Shift-click/box-drag adds · Middle-drag orbits · Shift+middle-drag pans");
         hint.setStyle("-fx-text-fill: #a7b0a8; -fx-background-color: #171e20cc; -fx-padding: 8 12 8 12;");
         inspectorRevealButton.setOnAction(event -> revealInspector());
         inspectorRevealButton.setStyle("-fx-text-fill: #e4d9bf; -fx-background-color: #202729; -fx-border-color: #6f7d74; -fx-padding: 8 12 8 12;");
@@ -2178,6 +2182,50 @@ public final class ModelStudio {
             showPart(lastSelected);
             statusLabel.setText("Selected " + partList.getSelectionModel().getSelectedItems().size()
                     + " visible Outliner component(s)");
+        }
+        drawTransformGizmo();
+    }
+
+    private void invertVisibleSelection() {
+        Set<String> selectedIds = partList.getSelectionModel().getSelectedItems().stream()
+                .map(TreeItem::getValue)
+                .map(part -> part.id)
+                .collect(java.util.stream.Collectors.toSet());
+        List<CustomModelDefinition.Part> candidates = parts.stream()
+                .filter(this::isEffectivelyVisible)
+                .filter(part -> findTreeItem(partList.getRoot(), part) != null)
+                .toList();
+        CustomModelDefinition.Part lastSelected = null;
+        for (CustomModelDefinition.Part part : candidates) {
+            TreeItem<CustomModelDefinition.Part> item = findTreeItem(partList.getRoot(), part);
+            if (item == null) continue;
+            if (selectedIds.contains(part.id)) {
+                partList.getSelectionModel().clearSelection(partList.getRow(item));
+            } else {
+                partList.getSelectionModel().select(item);
+                lastSelected = part;
+            }
+        }
+
+        List<TreeItem<CustomModelDefinition.Part>> selectedItems =
+                partList.getSelectionModel().getSelectedItems();
+        if (selectedItems.isEmpty()) {
+            selectedPartId = null;
+            statusLabel.setText(candidates.isEmpty()
+                    ? "No visible Outliner objects to invert"
+                    : "Selection inverted; no components selected");
+        } else {
+            TreeItem<CustomModelDefinition.Part> activeItem =
+                    partList.getSelectionModel().getSelectedItem();
+            if (activeItem == null && lastSelected != null) {
+                activeItem = findTreeItem(partList.getRoot(), lastSelected);
+            }
+            if (activeItem == null) activeItem = selectedItems.get(selectedItems.size() - 1);
+            CustomModelDefinition.Part active = activeItem.getValue();
+            selectedPartId = active.id;
+            showPart(active);
+            statusLabel.setText("Inverted selection for " + candidates.size()
+                    + " visible Outliner component(s); " + selectedItems.size() + " selected");
         }
         drawTransformGizmo();
     }
