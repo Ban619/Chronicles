@@ -50,3 +50,10 @@ ground details and environment props such as flowers, shrubs, lanterns, mushroom
 reeds, rubble, ruins, and crystals. These fallbacks are designed to make the game
 playable without external art assets; adding the files above replaces the
 corresponding fallback.
+
+The 3D Model Studio also ships with reusable procedural scene kits for fast world
+assembly: lanterns, walls, staircases, pillar rows, benches, archways, fences,
+wells, tree clusters, forest groves, shrines, crystal clusters, small houses,
+fountains, campfires, ruin towers, village plazas, market stalls, stone bridges,
+and gatehouses. These can be saved into `engine/models/` or `engine/components/` as
+JSON and reused across maps and prop compositions.

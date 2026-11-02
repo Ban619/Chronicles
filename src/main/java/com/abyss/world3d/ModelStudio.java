@@ -33,6 +33,7 @@ import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Separator;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.TreeCell;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
@@ -101,6 +102,7 @@ public final class ModelStudio {
     private final ComboBox<String> finishPicker = new ComboBox<>();
     private VBox selectedProperties;
     private Label inspectorSelectionLabel;
+    private static final double GRID_SIZE = 4.0;
     private final ToggleButton brushToggle = new ToggleButton("Brush");
     private final ToggleButton boxSelectToggle = new ToggleButton("Box");
     private final Button inspectorOpenButton = new Button("Component Inspector");
@@ -264,6 +266,10 @@ public final class ModelStudio {
                     default -> TransformOperation.SCALE;
                 });
                 event.consume();
+            } else if (event.getCode() == javafx.scene.input.KeyCode.F2
+                    && !(scene.getFocusOwner() instanceof TextField)) {
+                renameSelectedPart();
+                event.consume();
             } else if (event.getCode() == javafx.scene.input.KeyCode.DELETE
                     && !(scene.getFocusOwner() instanceof TextField)) {
                 removeSelectedPart();
@@ -271,6 +277,14 @@ public final class ModelStudio {
             } else if (event.isControlDown() && event.getCode() == javafx.scene.input.KeyCode.D
                     && !(scene.getFocusOwner() instanceof TextField)) {
                 duplicateSelectedPart();
+                event.consume();
+            } else if (event.isAltDown() && event.getCode() == javafx.scene.input.KeyCode.G
+                    && !(scene.getFocusOwner() instanceof TextField)) {
+                snapSelectedToGrid();
+                event.consume();
+            } else if (event.isAltDown() && event.getCode() == javafx.scene.input.KeyCode.C
+                    && !(scene.getFocusOwner() instanceof TextField)) {
+                centerSelectedOnOrigin();
                 event.consume();
             } else if (event.getCode() == javafx.scene.input.KeyCode.ESCAPE && viewportOnly) {
                 toggleViewportOnly(viewportModeButton);
@@ -335,11 +349,13 @@ public final class ModelStudio {
         redoMenuItem.setOnAction(event -> redo());
         undoMenuItem.setDisable(true);
         redoMenuItem.setDisable(true);
+        MenuItem rename = new MenuItem("Rename component...");
+        rename.setOnAction(event -> renameSelectedPart());
         MenuItem duplicate = new MenuItem("Duplicate component");
         duplicate.setOnAction(event -> duplicateSelectedPart());
         MenuItem remove = new MenuItem("Remove component");
         remove.setOnAction(event -> removeSelectedPart());
-        edit.getItems().addAll(undoMenuItem, redoMenuItem, new SeparatorMenuItem(), duplicate, remove);
+        edit.getItems().addAll(undoMenuItem, redoMenuItem, new SeparatorMenuItem(), rename, duplicate, remove);
 
         Menu view = new Menu("View");
         MenuItem expand = new MenuItem("Toggle expanded viewport");
@@ -356,9 +372,14 @@ public final class ModelStudio {
         hideSelection.setOnAction(event -> toggleSelectedVisibility());
         MenuItem showHidden = new MenuItem("Show all hidden components (Alt+H)");
         showHidden.setOnAction(event -> showAllComponents());
+        MenuItem snapGrid = new MenuItem("Snap selected to grid (Alt+G)");
+        snapGrid.setOnAction(event -> snapSelectedToGrid());
+        MenuItem centerSelection = new MenuItem("Center selected on origin (Alt+C)");
+        centerSelection.setOnAction(event -> centerSelectedOnOrigin());
         view.getItems().addAll(expand, showInspector, showToolbox,
                 new SeparatorMenuItem(), frameSelection, frameAll,
-                new SeparatorMenuItem(), hideSelection, showHidden);
+                new SeparatorMenuItem(), hideSelection, showHidden,
+                new SeparatorMenuItem(), snapGrid, centerSelection);
 
         Menu render = new Menu("Render");
         MenuItem refreshPreview = new MenuItem("Refresh model preview");
@@ -528,6 +549,11 @@ public final class ModelStudio {
             board.setContent(content);
             event.consume();
         });
+        templateList.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                importSelectedTemplate();
+            }
+        });
         Button createTab = new Button("Create");
         Button editTab = new Button("Edit");
         HBox modeTabs = new HBox(createTab, editTab);
@@ -539,9 +565,66 @@ public final class ModelStudio {
         Button importButton = new Button("＋  Import Component");
         importButton.setMaxWidth(Double.MAX_VALUE);
         importButton.setOnAction(event -> importComponent());
-        Button generate = new Button("✧  Generate Lantern");
-        generate.setMaxWidth(Double.MAX_VALUE);
-        generate.setOnAction(event -> generateLantern());
+        Button generateLanternButton = new Button("✧  Generate Lantern");
+        generateLanternButton.setMaxWidth(Double.MAX_VALUE);
+        generateLanternButton.setOnAction(event -> generateLantern());
+        Button generateWallButton = new Button("▭  Generate Wall");
+        generateWallButton.setMaxWidth(Double.MAX_VALUE);
+        generateWallButton.setOnAction(event -> generateWall());
+        Button generateStairsButton = new Button("▤  Generate Stairs");
+        generateStairsButton.setMaxWidth(Double.MAX_VALUE);
+        generateStairsButton.setOnAction(event -> generateStairs());
+        Button generatePillarsButton = new Button("▣  Generate Pillar Row");
+        generatePillarsButton.setMaxWidth(Double.MAX_VALUE);
+        generatePillarsButton.setOnAction(event -> generatePillarRow());
+        Button generateBenchButton = new Button("▢  Generate Bench");
+        generateBenchButton.setMaxWidth(Double.MAX_VALUE);
+        generateBenchButton.setOnAction(event -> generateBench());
+        Button generateArchButton = new Button("◫  Generate Archway");
+        generateArchButton.setMaxWidth(Double.MAX_VALUE);
+        generateArchButton.setOnAction(event -> generateArchway());
+        Button generateFenceButton = new Button("▮  Generate Fence");
+        generateFenceButton.setMaxWidth(Double.MAX_VALUE);
+        generateFenceButton.setOnAction(event -> generateFence());
+        Button generateWellButton = new Button("◍  Generate Well");
+        generateWellButton.setMaxWidth(Double.MAX_VALUE);
+        generateWellButton.setOnAction(event -> generateWell());
+        Button generateTreeButton = new Button("❀  Generate Tree Cluster");
+        generateTreeButton.setMaxWidth(Double.MAX_VALUE);
+        generateTreeButton.setOnAction(event -> generateTreeCluster());
+        Button generateShrineButton = new Button("✦  Generate Shrine");
+        generateShrineButton.setMaxWidth(Double.MAX_VALUE);
+        generateShrineButton.setOnAction(event -> generateShrine());
+        Button generateCrystalButton = new Button("⬢  Generate Crystal Cluster");
+        generateCrystalButton.setMaxWidth(Double.MAX_VALUE);
+        generateCrystalButton.setOnAction(event -> generateCrystalCluster());
+        Button generateHouseButton = new Button("⌂  Generate House");
+        generateHouseButton.setMaxWidth(Double.MAX_VALUE);
+        generateHouseButton.setOnAction(event -> generateHouse());
+        Button generateFountainButton = new Button("◉  Generate Fountain");
+        generateFountainButton.setMaxWidth(Double.MAX_VALUE);
+        generateFountainButton.setOnAction(event -> generateFountain());
+        Button generateCampfireButton = new Button("✹  Generate Campfire");
+        generateCampfireButton.setMaxWidth(Double.MAX_VALUE);
+        generateCampfireButton.setOnAction(event -> generateCampfire());
+        Button generateRuinButton = new Button("⛭  Generate Ruin Tower");
+        generateRuinButton.setMaxWidth(Double.MAX_VALUE);
+        generateRuinButton.setOnAction(event -> generateRuinTower());
+        Button generatePlazaButton = new Button("◈  Generate Village Plaza");
+        generatePlazaButton.setMaxWidth(Double.MAX_VALUE);
+        generatePlazaButton.setOnAction(event -> generateVillagePlaza());
+        Button generateMarketStallButton = new Button("▦  Generate Market Stall");
+        generateMarketStallButton.setMaxWidth(Double.MAX_VALUE);
+        generateMarketStallButton.setOnAction(event -> generateMarketStall());
+        Button generateBridgeButton = new Button("⎍  Generate Stone Bridge");
+        generateBridgeButton.setMaxWidth(Double.MAX_VALUE);
+        generateBridgeButton.setOnAction(event -> generateStoneBridge());
+        Button generateGatehouseButton = new Button("▣  Generate Gatehouse");
+        generateGatehouseButton.setMaxWidth(Double.MAX_VALUE);
+        generateGatehouseButton.setOnAction(event -> generateGatehouse());
+        Button generateForestGroveButton = new Button("❋  Generate Forest Grove");
+        generateForestGroveButton.setMaxWidth(Double.MAX_VALUE);
+        generateForestGroveButton.setOnAction(event -> generateForestGrove());
         Button clear = new Button("⌫  Clear Model");
         clear.setMaxWidth(Double.MAX_VALUE);
         clear.setOnAction(event -> clearModel());
@@ -551,8 +634,14 @@ public final class ModelStudio {
             add.setOnAction(event -> addPart(shape));
             geometry.getChildren().add(add);
         }
-        VBox createContent = new VBox(7, importButton, generate, clear,
-                new Label("ADD PRIMITIVE"), geometry);
+        VBox createContent = new VBox(7, importButton, generateLanternButton,
+                generateWallButton, generateStairsButton, generatePillarsButton,
+                generateBenchButton, generateArchButton, generateFenceButton,
+                generateWellButton, generateTreeButton, generateShrineButton,
+                generateCrystalButton, generateHouseButton, generateFountainButton,
+                generateCampfireButton, generateRuinButton, generatePlazaButton,
+                generateMarketStallButton, generateBridgeButton, generateGatehouseButton,
+                generateForestGroveButton, clear, new Label("ADD PRIMITIVE"), geometry);
         Button duplicate = new Button("Duplicate Selected");
         duplicate.setMaxWidth(Double.MAX_VALUE);
         duplicate.setOnAction(event -> duplicateSelectedPart());
@@ -583,9 +672,14 @@ public final class ModelStudio {
 
         Button refresh = new Button("↻ Refresh");
         refresh.setOnAction(event -> refreshTemplates());
+        Button importSelected = new Button("Import");
+        importSelected.setOnAction(event -> importSelectedTemplate());
+        Button deleteSelected = new Button("Delete");
+        deleteSelected.setOnAction(event -> deleteSelectedTemplate());
+        HBox toolboxActions = new HBox(6, refresh, importSelected, deleteSelected);
         BorderPane toolboxHeader = new BorderPane();
         toolboxHeader.setLeft(new Label("TOOLBOX"));
-        toolboxHeader.setRight(refresh);
+        toolboxHeader.setRight(toolboxActions);
         toolboxHeader.setPadding(new Insets(7, 10, 7, 10));
         Label hint = new Label("Drag a model or component into the viewport to add its parts.");
         hint.setWrapText(true);
@@ -646,6 +740,1093 @@ public final class ModelStudio {
         });
     }
 
+    private void generateWall() {
+        performEdit(() -> {
+            parts.clear();
+            String wallName = "Stone Wall";
+            for (int index = 0; index < 6; index++) {
+                CustomModelDefinition.Part segment = newPart("BOX");
+                segment.name = wallName + " " + (index + 1);
+                segment.x = (index - 2.5) * 18;
+                segment.y = 18;
+                segment.width = 14;
+                segment.height = 32;
+                segment.depth = 14;
+                segment.material = "STONE";
+                segment.color = SemanticMaterial.STONE.baseColor();
+                parts.add(segment);
+            }
+            modelName.setText("Stone Wall");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a six-segment wall kit");
+        });
+    }
+
+    private void generateStairs() {
+        performEdit(() -> {
+            parts.clear();
+            for (int step = 0; step < 6; step++) {
+                CustomModelDefinition.Part tread = newPart("BOX");
+                tread.name = "Stair " + (step + 1);
+                tread.x = step * 16;
+                tread.y = step * 5 + 5;
+                tread.z = 0;
+                tread.width = 20;
+                tread.height = 5;
+                tread.depth = 30 - step * 3;
+                tread.material = "STONE";
+                tread.color = SemanticMaterial.STONE.baseColor();
+                parts.add(tread);
+            }
+            modelName.setText("Staircase");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a six-step staircase");
+        });
+    }
+
+    private void generatePillarRow() {
+        performEdit(() -> {
+            parts.clear();
+            for (int pillar = 0; pillar < 5; pillar++) {
+                CustomModelDefinition.Part shaft = newPart("CYLINDER");
+                shaft.name = "Pillar " + (pillar + 1);
+                shaft.x = (pillar - 2) * 26;
+                shaft.y = 24;
+                shaft.z = 0;
+                shaft.width = 11;
+                shaft.height = 48;
+                shaft.depth = 11;
+                shaft.material = "STONE";
+                shaft.color = SemanticMaterial.STONE.baseColor();
+                parts.add(shaft);
+
+                CustomModelDefinition.Part cap = newPart("BOX");
+                cap.name = "Pillar Cap " + (pillar + 1);
+                cap.x = shaft.x;
+                cap.y = 49;
+                cap.z = 0;
+                cap.width = 18;
+                cap.height = 4;
+                cap.depth = 18;
+                cap.material = "STONE";
+                cap.color = SemanticMaterial.STONE.baseColor();
+                parts.add(cap);
+            }
+            modelName.setText("Pillar Row");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a five-pillar row");
+        });
+    }
+
+    private void generateBench() {
+        performEdit(() -> {
+            parts.clear();
+            CustomModelDefinition.Part seat = newPart("BOX");
+            seat.name = "Bench Seat";
+            seat.y = 8;
+            seat.width = 38;
+            seat.height = 4;
+            seat.depth = 12;
+            seat.material = "WOOD";
+            seat.color = SemanticMaterial.WOOD.baseColor();
+            parts.add(seat);
+
+            CustomModelDefinition.Part back = newPart("BOX");
+            back.name = "Bench Back";
+            back.x = 0;
+            back.y = 16;
+            back.z = -5;
+            back.width = 38;
+            back.height = 12;
+            back.depth = 3;
+            back.material = "WOOD";
+            back.color = SemanticMaterial.WOOD.baseColor();
+            parts.add(back);
+
+            for (int leg = 0; leg < 4; leg++) {
+                int signX = leg % 2 == 0 ? -1 : 1;
+                int signZ = leg < 2 ? -1 : 1;
+                CustomModelDefinition.Part benchLeg = newPart("BOX");
+                benchLeg.name = "Bench Leg " + (leg + 1);
+                benchLeg.x = signX * 15;
+                benchLeg.y = -5;
+                benchLeg.z = signZ * 4;
+                benchLeg.width = 3;
+                benchLeg.height = 18;
+                benchLeg.depth = 3;
+                benchLeg.material = "WOOD";
+                benchLeg.color = SemanticMaterial.WOOD.baseColor();
+                parts.add(benchLeg);
+            }
+
+            modelName.setText("Stone Bench");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a scene bench kit");
+        });
+    }
+
+    private void generateArchway() {
+        performEdit(() -> {
+            parts.clear();
+            double[] xs = {-28, 28};
+            for (double x : xs) {
+                CustomModelDefinition.Part pillar = newPart("BOX");
+                pillar.name = x < 0 ? "Left Arch Pillar" : "Right Arch Pillar";
+                pillar.x = x;
+                pillar.y = 25;
+                pillar.z = 0;
+                pillar.width = 8;
+                pillar.height = 52;
+                pillar.depth = 8;
+                pillar.material = "STONE";
+                pillar.color = SemanticMaterial.STONE.baseColor();
+                parts.add(pillar);
+            }
+
+            CustomModelDefinition.Part top = newPart("BOX");
+            top.name = "Arch Lintel";
+            top.x = 0;
+            top.y = 52;
+            top.z = 0;
+            top.width = 60;
+            top.height = 8;
+            top.depth = 8;
+            top.material = "STONE";
+            top.color = SemanticMaterial.STONE.baseColor();
+            parts.add(top);
+
+            CustomModelDefinition.Part curve = newPart("BOX");
+            curve.name = "Arch Curve";
+            curve.x = 0;
+            curve.y = 40;
+            curve.z = 0;
+            curve.width = 44;
+            curve.height = 6;
+            curve.depth = 8;
+            curve.material = "STONE";
+            curve.color = SemanticMaterial.STONE.baseColor();
+            parts.add(curve);
+
+            modelName.setText("Stone Archway");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated an archway kit");
+        });
+    }
+
+    private void generateFence() {
+        performEdit(() -> {
+            parts.clear();
+            for (int index = 0; index < 5; index++) {
+                double x = (index - 2) * 18;
+                CustomModelDefinition.Part post = newPart("BOX");
+                post.name = "Fence Post " + (index + 1);
+                post.x = x;
+                post.y = 10;
+                post.z = 0;
+                post.width = 3;
+                post.height = 20;
+                post.depth = 3;
+                post.material = "WOOD";
+                post.color = SemanticMaterial.WOOD.baseColor();
+                parts.add(post);
+
+                CustomModelDefinition.Part railTop = newPart("BOX");
+                railTop.name = "Fence Rail Top " + (index + 1);
+                railTop.x = x;
+                railTop.y = 18;
+                railTop.z = 0;
+                railTop.width = 16;
+                railTop.height = 3;
+                railTop.depth = 3;
+                railTop.material = "WOOD";
+                railTop.color = SemanticMaterial.WOOD.baseColor();
+                parts.add(railTop);
+
+                CustomModelDefinition.Part railMid = newPart("BOX");
+                railMid.name = "Fence Rail Mid " + (index + 1);
+                railMid.x = x;
+                railMid.y = 12;
+                railMid.z = 0;
+                railMid.width = 16;
+                railMid.height = 3;
+                railMid.depth = 3;
+                railMid.material = "WOOD";
+                railMid.color = SemanticMaterial.WOOD.baseColor();
+                parts.add(railMid);
+            }
+
+            modelName.setText("Wood Fence");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a five-panel fence kit");
+        });
+    }
+
+    private void generateWell() {
+        performEdit(() -> {
+            parts.clear();
+            CustomModelDefinition.Part stoneRing = newPart("CYLINDER");
+            stoneRing.name = "Well Ring";
+            stoneRing.x = 0;
+            stoneRing.y = 6;
+            stoneRing.z = 0;
+            stoneRing.width = 25;
+            stoneRing.height = 12;
+            stoneRing.depth = 25;
+            stoneRing.material = "STONE";
+            stoneRing.color = SemanticMaterial.STONE.baseColor();
+            parts.add(stoneRing);
+
+            CustomModelDefinition.Part water = newPart("CYLINDER");
+            water.name = "Well Water";
+            water.x = 0;
+            water.y = 2;
+            water.z = 0;
+            water.width = 20;
+            water.height = 4;
+            water.depth = 20;
+            water.material = "GLASS";
+            water.finish = "GLASS";
+            water.color = SemanticMaterial.FLAME.baseColor();
+            parts.add(water);
+
+            CustomModelDefinition.Part lip = newPart("BOX");
+            lip.name = "Well Lip";
+            lip.x = 0;
+            lip.y = 15;
+            lip.z = 0;
+            lip.width = 30;
+            lip.height = 4;
+            lip.depth = 30;
+            lip.material = "STONE";
+            lip.color = SemanticMaterial.STONE.baseColor();
+            parts.add(lip);
+
+            CustomModelDefinition.Part roof = newPart("CONE");
+            roof.name = "Well Roof";
+            roof.x = 0;
+            roof.y = 28;
+            roof.z = 0;
+            roof.width = 26;
+            roof.height = 14;
+            roof.depth = 26;
+            roof.material = "WOOD";
+            roof.color = SemanticMaterial.WOOD.baseColor();
+            parts.add(roof);
+
+            modelName.setText("Stone Well");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a village well kit");
+        });
+    }
+
+    private void generateTreeCluster() {
+        performEdit(() -> {
+            parts.clear();
+            double[] xs = {-20, 0, 20};
+            double[] zs = {-10, 10};
+            for (double x : xs) {
+                for (double z : zs) {
+                    CustomModelDefinition.Part trunk = newPart("CYLINDER");
+                    trunk.name = "Tree Trunk";
+                    trunk.x = x;
+                    trunk.y = 18;
+                    trunk.z = z;
+                    trunk.width = 6;
+                    trunk.height = 34;
+                    trunk.depth = 6;
+                    trunk.material = "WOOD";
+                    trunk.color = SemanticMaterial.WOOD.baseColor();
+                    parts.add(trunk);
+
+                    CustomModelDefinition.Part leaves = newPart("SPHERE");
+                    leaves.name = "Tree Leaves";
+                    leaves.x = x;
+                    leaves.y = 36;
+                    leaves.z = z;
+                    leaves.width = 18;
+                    leaves.height = 18;
+                    leaves.depth = 18;
+                    leaves.material = "FOLIAGE";
+                    leaves.color = SemanticMaterial.FOLIAGE.baseColor();
+                    parts.add(leaves);
+                }
+            }
+
+            modelName.setText("Tree Cluster");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a three-tree grove cluster");
+        });
+    }
+
+    private void generateShrine() {
+        performEdit(() -> {
+            parts.clear();
+
+            CustomModelDefinition.Part pedestal = newPart("CYLINDER");
+            pedestal.name = "Shrine Pedestal";
+            pedestal.x = 0;
+            pedestal.y = 10;
+            pedestal.z = 0;
+            pedestal.width = 24;
+            pedestal.height = 18;
+            pedestal.depth = 24;
+            pedestal.material = "STONE";
+            pedestal.color = SemanticMaterial.STONE.baseColor();
+            parts.add(pedestal);
+
+            CustomModelDefinition.Part altar = newPart("BOX");
+            altar.name = "Shrine Altar";
+            altar.x = 0;
+            altar.y = 26;
+            altar.z = 0;
+            altar.width = 18;
+            altar.height = 4;
+            altar.depth = 18;
+            altar.material = "STONE";
+            altar.color = SemanticMaterial.STONE.baseColor();
+            parts.add(altar);
+
+            CustomModelDefinition.Part crystal = newPart("CONE");
+            crystal.name = "Shrine Crystal";
+            crystal.x = 0;
+            crystal.y = 38;
+            crystal.z = 0;
+            crystal.width = 10;
+            crystal.height = 24;
+            crystal.depth = 10;
+            crystal.material = "GLASS";
+            crystal.finish = "EMISSIVE";
+            crystal.color = SemanticMaterial.FLAME.baseColor();
+            parts.add(crystal);
+
+            CustomModelDefinition.Part ring = newPart("RING");
+            ring.name = "Shrine Halo";
+            ring.x = 0;
+            ring.y = 40;
+            ring.z = 0;
+            ring.width = 24;
+            ring.height = 4;
+            ring.depth = 24;
+            ring.material = "IRON";
+            ring.color = SemanticMaterial.IRON.baseColor();
+            parts.add(ring);
+
+            modelName.setText("Ancient Shrine");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a shrine prop kit");
+        });
+    }
+
+    private void generateCrystalCluster() {
+        performEdit(() -> {
+            parts.clear();
+            double[] xs = {-20, 0, 20};
+            double[] zs = {-14, 0, 14};
+            for (double x : xs) {
+                for (double z : zs) {
+                    CustomModelDefinition.Part crystal = newPart("CONE");
+                    crystal.name = "Crystal";
+                    crystal.x = x;
+                    crystal.y = 10;
+                    crystal.z = z;
+                    crystal.width = 7;
+                    crystal.height = 20;
+                    crystal.depth = 7;
+                    crystal.material = "GLASS";
+                    crystal.finish = "EMISSIVE";
+                    crystal.color = SemanticMaterial.FLAME.baseColor();
+                    parts.add(crystal);
+                }
+            }
+
+            modelName.setText("Crystal Cluster");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a crystal cluster kit");
+        });
+    }
+
+    private void generateHouse() {
+        performEdit(() -> {
+            parts.clear();
+
+            CustomModelDefinition.Part floor = newPart("BOX");
+            floor.name = "House Floor";
+            floor.x = 0;
+            floor.y = 3;
+            floor.z = 0;
+            floor.width = 48;
+            floor.height = 4;
+            floor.depth = 40;
+            floor.material = "WOOD";
+            floor.color = SemanticMaterial.WOOD.baseColor();
+            parts.add(floor);
+
+            CustomModelDefinition.Part walls = newPart("BOX");
+            walls.name = "House Walls";
+            walls.x = 0;
+            walls.y = 18;
+            walls.z = 0;
+            walls.width = 42;
+            walls.height = 28;
+            walls.depth = 34;
+            walls.material = "STONE";
+            walls.color = SemanticMaterial.STONE.baseColor();
+            parts.add(walls);
+
+            CustomModelDefinition.Part roof = newPart("CONE");
+            roof.name = "House Roof";
+            roof.x = 0;
+            roof.y = 40;
+            roof.z = 0;
+            roof.width = 50;
+            roof.height = 28;
+            roof.depth = 48;
+            roof.material = "WOOD";
+            roof.color = SemanticMaterial.WOOD.baseColor();
+            parts.add(roof);
+
+            double[] xs = {-18, 18};
+            for (double x : xs) {
+                CustomModelDefinition.Part pillar = newPart("BOX");
+                pillar.name = x < 0 ? "House Post Left" : "House Post Right";
+                pillar.x = x;
+                pillar.y = 18;
+                pillar.z = 0;
+                pillar.width = 5;
+                pillar.height = 28;
+                pillar.depth = 5;
+                pillar.material = "WOOD";
+                pillar.color = SemanticMaterial.WOOD.baseColor();
+                parts.add(pillar);
+            }
+
+            CustomModelDefinition.Part door = newPart("BOX");
+            door.name = "House Door";
+            door.x = 0;
+            door.y = 12;
+            door.z = 18;
+            door.width = 12;
+            door.height = 18;
+            door.depth = 3;
+            door.material = "WOOD";
+            door.color = SemanticMaterial.WOOD.baseColor();
+            parts.add(door);
+
+            modelName.setText("Village House");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a small village house kit");
+        });
+    }
+
+    private void generateFountain() {
+        performEdit(() -> {
+            parts.clear();
+
+            CustomModelDefinition.Part basin = newPart("CYLINDER");
+            basin.name = "Fountain Basin";
+            basin.x = 0;
+            basin.y = 5;
+            basin.z = 0;
+            basin.width = 26;
+            basin.height = 10;
+            basin.depth = 26;
+            basin.material = "STONE";
+            basin.color = SemanticMaterial.STONE.baseColor();
+            parts.add(basin);
+
+            CustomModelDefinition.Part pool = newPart("CYLINDER");
+            pool.name = "Fountain Water";
+            pool.x = 0;
+            pool.y = 9;
+            pool.z = 0;
+            pool.width = 18;
+            pool.height = 5;
+            pool.depth = 18;
+            pool.material = "GLASS";
+            pool.finish = "GLASS";
+            pool.color = SemanticMaterial.FLAME.baseColor();
+            parts.add(pool);
+
+            CustomModelDefinition.Part spire = newPart("CONE");
+            spire.name = "Fountain Spire";
+            spire.x = 0;
+            spire.y = 26;
+            spire.z = 0;
+            spire.width = 8;
+            spire.height = 18;
+            spire.depth = 8;
+            spire.material = "IRON";
+            spire.color = SemanticMaterial.IRON.baseColor();
+            parts.add(spire);
+
+            for (int index = 0; index < 4; index++) {
+                double angle = Math.PI / 2 * index;
+                CustomModelDefinition.Part ledge = newPart("BOX");
+                ledge.name = "Fountain Ledge " + (index + 1);
+                ledge.x = Math.cos(angle) * 16;
+                ledge.y = 16;
+                ledge.z = Math.sin(angle) * 16;
+                ledge.width = 5;
+                ledge.height = 5;
+                ledge.depth = 5;
+                ledge.material = "STONE";
+                ledge.color = SemanticMaterial.STONE.baseColor();
+                parts.add(ledge);
+            }
+
+            modelName.setText("Village Fountain");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a village fountain kit");
+        });
+    }
+
+    private void generateCampfire() {
+        performEdit(() -> {
+            parts.clear();
+
+            CustomModelDefinition.Part base = newPart("CYLINDER");
+            base.name = "Campfire Base";
+            base.x = 0;
+            base.y = 4;
+            base.z = 0;
+            base.width = 12;
+            base.height = 8;
+            base.depth = 12;
+            base.material = "STONE";
+            base.color = SemanticMaterial.STONE.baseColor();
+            parts.add(base);
+
+            CustomModelDefinition.Part flame = newPart("CONE");
+            flame.name = "Campfire Flame";
+            flame.x = 0;
+            flame.y = 12;
+            flame.z = 0;
+            flame.width = 8;
+            flame.height = 16;
+            flame.depth = 8;
+            flame.material = "GLASS";
+            flame.finish = "EMISSIVE";
+            flame.color = SemanticMaterial.FLAME.baseColor();
+            parts.add(flame);
+
+            for (int index = 0; index < 6; index++) {
+                double angle = (Math.PI * 2 / 6) * index;
+                CustomModelDefinition.Part log = newPart("BOX");
+                log.name = "Campfire Log " + (index + 1);
+                log.x = Math.cos(angle) * 10;
+                log.y = 6;
+                log.z = Math.sin(angle) * 10;
+                log.width = 3;
+                log.height = 3;
+                log.depth = 14;
+                log.material = "WOOD";
+                log.color = SemanticMaterial.WOOD.baseColor();
+                log.rotateY = Math.toDegrees(angle) + 90;
+                parts.add(log);
+            }
+
+            modelName.setText("Campfire");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a campfire kit");
+        });
+    }
+
+    private void generateRuinTower() {
+        performEdit(() -> {
+            parts.clear();
+
+            for (int level = 0; level < 4; level++) {
+                CustomModelDefinition.Part ring = newPart("BOX");
+                ring.name = "Ruin Level " + (level + 1);
+                ring.x = 0;
+                ring.y = 12 + level * 12;
+                ring.z = 0;
+                ring.width = 20 - level * 3;
+                ring.height = 6;
+                ring.depth = 20 - level * 3;
+                ring.material = "STONE";
+                ring.color = SemanticMaterial.STONE.baseColor();
+                parts.add(ring);
+            }
+
+            CustomModelDefinition.Part top = newPart("CONE");
+            top.name = "Ruin Spire";
+            top.x = 0;
+            top.y = 58;
+            top.z = 0;
+            top.width = 10;
+            top.height = 22;
+            top.depth = 10;
+            top.material = "STONE";
+            top.color = SemanticMaterial.STONE.baseColor();
+            parts.add(top);
+
+            CustomModelDefinition.Part arch = newPart("BOX");
+            arch.name = "Ruin Arch";
+            arch.x = 0;
+            arch.y = 24;
+            arch.z = 0;
+            arch.width = 12;
+            arch.height = 18;
+            arch.depth = 8;
+            arch.material = "STONE";
+            arch.color = SemanticMaterial.STONE.baseColor();
+            parts.add(arch);
+
+            modelName.setText("Ruin Tower");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a ruin tower kit");
+        });
+    }
+
+    private void generateVillagePlaza() {
+        performEdit(() -> {
+            parts.clear();
+
+            CustomModelDefinition.Part plaza = newPart("BOX");
+            plaza.name = "Plaza Floor";
+            plaza.x = 0;
+            plaza.y = 2;
+            plaza.z = 0;
+            plaza.width = 90;
+            plaza.height = 4;
+            plaza.depth = 90;
+            plaza.material = "STONE";
+            plaza.color = SemanticMaterial.STONE.baseColor();
+            parts.add(plaza);
+
+            CustomModelDefinition.Part fountain = newPart("CYLINDER");
+            fountain.name = "Plaza Fountain";
+            fountain.x = 0;
+            fountain.y = 8;
+            fountain.z = 0;
+            fountain.width = 22;
+            fountain.height = 16;
+            fountain.depth = 22;
+            fountain.material = "STONE";
+            fountain.color = SemanticMaterial.STONE.baseColor();
+            parts.add(fountain);
+
+            CustomModelDefinition.Part fountainWater = newPart("CYLINDER");
+            fountainWater.name = "Plaza Fountain Water";
+            fountainWater.x = 0;
+            fountainWater.y = 11;
+            fountainWater.z = 0;
+            fountainWater.width = 16;
+            fountainWater.height = 4;
+            fountainWater.depth = 16;
+            fountainWater.material = "GLASS";
+            fountainWater.finish = "GLASS";
+            fountainWater.color = SemanticMaterial.FLAME.baseColor();
+            parts.add(fountainWater);
+
+            double[] benchXs = {-26, 26};
+            for (double x : benchXs) {
+                CustomModelDefinition.Part bench = newPart("BOX");
+                bench.name = x < 0 ? "West Bench" : "East Bench";
+                bench.x = x;
+                bench.y = 8;
+                bench.z = 0;
+                bench.width = 18;
+                bench.height = 4;
+                bench.depth = 10;
+                bench.material = "WOOD";
+                bench.color = SemanticMaterial.WOOD.baseColor();
+                parts.add(bench);
+            }
+
+            double[] lanternXs = {-34, -12, 12, 34};
+            for (double x : lanternXs) {
+                CustomModelDefinition.Part lantern = newPart("CYLINDER");
+                lantern.name = "Lantern Post";
+                lantern.x = x;
+                lantern.y = 16;
+                lantern.z = 0;
+                lantern.width = 4;
+                lantern.height = 22;
+                lantern.depth = 4;
+                lantern.material = "IRON";
+                lantern.color = SemanticMaterial.IRON.baseColor();
+                parts.add(lantern);
+
+                CustomModelDefinition.Part glow = newPart("SPHERE");
+                glow.name = "Lantern Glow";
+                glow.x = x;
+                glow.y = 30;
+                glow.z = 0;
+                glow.width = 8;
+                glow.height = 8;
+                glow.depth = 8;
+                glow.material = "GLASS";
+                glow.finish = "EMISSIVE";
+                glow.color = SemanticMaterial.FLAME.baseColor();
+                parts.add(glow);
+            }
+
+            double[] treeXs = {-40, -14, 14, 40};
+            for (double x : treeXs) {
+                CustomModelDefinition.Part trunk = newPart("CYLINDER");
+                trunk.name = "Plaza Tree Trunk";
+                trunk.x = x;
+                trunk.y = 18;
+                trunk.z = -18;
+                trunk.width = 6;
+                trunk.height = 30;
+                trunk.depth = 6;
+                trunk.material = "WOOD";
+                trunk.color = SemanticMaterial.WOOD.baseColor();
+                parts.add(trunk);
+
+                CustomModelDefinition.Part leaves = newPart("SPHERE");
+                leaves.name = "Plaza Tree Leaves";
+                leaves.x = x;
+                leaves.y = 34;
+                leaves.z = -18;
+                leaves.width = 18;
+                leaves.height = 18;
+                leaves.depth = 18;
+                leaves.material = "FOLIAGE";
+                leaves.color = SemanticMaterial.FOLIAGE.baseColor();
+                parts.add(leaves);
+            }
+
+            modelName.setText("Village Plaza");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a full village plaza scene kit");
+        });
+    }
+
+    private void generateMarketStall() {
+        performEdit(() -> {
+            parts.clear();
+
+            CustomModelDefinition.Part base = newPart("BOX");
+            base.name = "Market Stall Base";
+            base.x = 0;
+            base.y = 4;
+            base.z = 0;
+            base.width = 32;
+            base.height = 6;
+            base.depth = 18;
+            base.material = "WOOD";
+            base.color = SemanticMaterial.WOOD.baseColor();
+            parts.add(base);
+
+            CustomModelDefinition.Part roof = newPart("BOX");
+            roof.name = "Market Stall Roof";
+            roof.x = 0;
+            roof.y = 18;
+            roof.z = 0;
+            roof.width = 36;
+            roof.height = 4;
+            roof.depth = 22;
+            roof.material = "WOOD";
+            roof.color = SemanticMaterial.WOOD.baseColor();
+            parts.add(roof);
+
+            double[] xPositions = {-12, 12};
+            for (double x : xPositions) {
+                CustomModelDefinition.Part post = newPart("BOX");
+                post.name = x < 0 ? "Left Stall Post" : "Right Stall Post";
+                post.x = x;
+                post.y = 12;
+                post.z = 0;
+                post.width = 3;
+                post.height = 20;
+                post.depth = 3;
+                post.material = "WOOD";
+                post.color = SemanticMaterial.WOOD.baseColor();
+                parts.add(post);
+            }
+
+            for (int i = 0; i < 3; i++) {
+                CustomModelDefinition.Part crate = newPart("BOX");
+                crate.name = "Market Crate " + (i + 1);
+                crate.x = -8 + i * 8;
+                crate.y = 9;
+                crate.z = 4;
+                crate.width = 8;
+                crate.height = 8;
+                crate.depth = 8;
+                crate.material = "WOOD";
+                crate.color = SemanticMaterial.WOOD.baseColor();
+                parts.add(crate);
+            }
+
+            CustomModelDefinition.Part cloth = newPart("BOX");
+            cloth.name = "Market Cloth";
+            cloth.x = 0;
+            cloth.y = 16;
+            cloth.z = -2;
+            cloth.width = 26;
+            cloth.height = 10;
+            cloth.depth = 2;
+            cloth.material = "LEATHER";
+            cloth.color = SemanticMaterial.LEATHER.baseColor();
+            parts.add(cloth);
+
+            modelName.setText("Market Stall");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a market stall scene kit");
+        });
+    }
+
+    private void generateForestGrove() {
+        performEdit(() -> {
+            parts.clear();
+
+            CustomModelDefinition.Part path = newPart("BOX");
+            path.name = "Forest Path";
+            path.x = 0;
+            path.y = 2;
+            path.z = 0;
+            path.width = 72;
+            path.height = 3;
+            path.depth = 22;
+            path.material = "STONE";
+            path.color = SemanticMaterial.STONE.baseColor();
+            parts.add(path);
+
+            double[] treeXs = {-28, -12, 12, 28};
+            double[] treeZs = {-10, 10};
+            for (double x : treeXs) {
+                for (double z : treeZs) {
+                    CustomModelDefinition.Part trunk = newPart("CYLINDER");
+                    trunk.name = "Forest Tree Trunk";
+                    trunk.x = x;
+                    trunk.y = 18;
+                    trunk.z = z;
+                    trunk.width = 6;
+                    trunk.height = 32;
+                    trunk.depth = 6;
+                    trunk.material = "WOOD";
+                    trunk.color = SemanticMaterial.WOOD.baseColor();
+                    parts.add(trunk);
+
+                    CustomModelDefinition.Part leaves = newPart("SPHERE");
+                    leaves.name = "Forest Leaves";
+                    leaves.x = x;
+                    leaves.y = 38;
+                    leaves.z = z;
+                    leaves.width = 18;
+                    leaves.height = 18;
+                    leaves.depth = 18;
+                    leaves.material = "FOLIAGE";
+                    leaves.color = SemanticMaterial.FOLIAGE.baseColor();
+                    parts.add(leaves);
+                }
+            }
+
+            double[] rockXs = {-42, 0, 42};
+            for (double x : rockXs) {
+                CustomModelDefinition.Part rock = newPart("SPHERE");
+                rock.name = "Forest Boulder";
+                rock.x = x;
+                rock.y = 8;
+                rock.z = 18;
+                rock.width = 10;
+                rock.height = 10;
+                rock.depth = 10;
+                rock.material = "STONE";
+                rock.color = SemanticMaterial.STONE.baseColor();
+                parts.add(rock);
+            }
+
+            double[][] mushrooms = {{-14, -18}, {14, -18}, {0, 22}};
+            for (double[] location : mushrooms) {
+                CustomModelDefinition.Part stem = newPart("CYLINDER");
+                stem.name = "Mushroom Stem";
+                stem.x = location[0];
+                stem.y = 6;
+                stem.z = location[1];
+                stem.width = 3;
+                stem.height = 8;
+                stem.depth = 3;
+                stem.material = "WOOD";
+                stem.color = SemanticMaterial.WOOD.baseColor();
+                parts.add(stem);
+
+                CustomModelDefinition.Part cap = newPart("SPHERE");
+                cap.name = "Mushroom Cap";
+                cap.x = location[0];
+                cap.y = 12;
+                cap.z = location[1];
+                cap.width = 7;
+                cap.height = 7;
+                cap.depth = 7;
+                cap.material = "GLASS";
+                cap.finish = "EMISSIVE";
+                cap.color = SemanticMaterial.FLAME.baseColor();
+                parts.add(cap);
+            }
+
+            modelName.setText("Forest Grove");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a forest grove scene kit");
+        });
+    }
+
+    private void generateStoneBridge() {
+        performEdit(() -> {
+            parts.clear();
+
+            for (int i = 0; i < 5; i++) {
+                CustomModelDefinition.Part deck = newPart("BOX");
+                deck.name = "Bridge Deck " + (i + 1);
+                deck.x = (i - 2) * 20;
+                deck.y = 6;
+                deck.z = 0;
+                deck.width = 18;
+                deck.height = 6;
+                deck.depth = 32;
+                deck.material = "STONE";
+                deck.color = SemanticMaterial.STONE.baseColor();
+                parts.add(deck);
+
+                CustomModelDefinition.Part pier = newPart("BOX");
+                pier.name = "Bridge Pier " + (i + 1);
+                pier.x = deck.x;
+                pier.y = -4;
+                pier.z = 0;
+                pier.width = 8;
+                pier.height = 18;
+                pier.depth = 8;
+                pier.material = "STONE";
+                pier.color = SemanticMaterial.STONE.baseColor();
+                parts.add(pier);
+            }
+
+            for (int side = -1; side <= 1; side += 2) {
+                CustomModelDefinition.Part rail = newPart("BOX");
+                rail.name = side < 0 ? "Bridge Rail Left" : "Bridge Rail Right";
+                rail.x = 0;
+                rail.y = 14;
+                rail.z = side * 13;
+                rail.width = 90;
+                rail.height = 3;
+                rail.depth = 3;
+                rail.material = "STONE";
+                rail.color = SemanticMaterial.STONE.baseColor();
+                parts.add(rail);
+            }
+
+            modelName.setText("Stone Bridge");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a stone bridge kit");
+        });
+    }
+
+    private void generateGatehouse() {
+        performEdit(() -> {
+            parts.clear();
+
+            CustomModelDefinition.Part floor = newPart("BOX");
+            floor.name = "Gatehouse Floor";
+            floor.x = 0;
+            floor.y = 4;
+            floor.z = 0;
+            floor.width = 54;
+            floor.height = 6;
+            floor.depth = 28;
+            floor.material = "STONE";
+            floor.color = SemanticMaterial.STONE.baseColor();
+            parts.add(floor);
+
+            double[] towerXs = {-20, 20};
+            for (double x : towerXs) {
+                CustomModelDefinition.Part tower = newPart("BOX");
+                tower.name = x < 0 ? "Gate Tower Left" : "Gate Tower Right";
+                tower.x = x;
+                tower.y = 26;
+                tower.z = 0;
+                tower.width = 10;
+                tower.height = 42;
+                tower.depth = 10;
+                tower.material = "STONE";
+                tower.color = SemanticMaterial.STONE.baseColor();
+                parts.add(tower);
+
+                CustomModelDefinition.Part roof = newPart("CONE");
+                roof.name = x < 0 ? "Left Tower Roof" : "Right Tower Roof";
+                roof.x = x;
+                roof.y = 52;
+                roof.z = 0;
+                roof.width = 16;
+                roof.height = 16;
+                roof.depth = 16;
+                roof.material = "WOOD";
+                roof.color = SemanticMaterial.WOOD.baseColor();
+                parts.add(roof);
+            }
+
+            CustomModelDefinition.Part gate = newPart("BOX");
+            gate.name = "Gate";
+            gate.x = 0;
+            gate.y = 18;
+            gate.z = 12;
+            gate.width = 18;
+            gate.height = 26;
+            gate.depth = 4;
+            gate.material = "IRON";
+            gate.color = SemanticMaterial.IRON.baseColor();
+            parts.add(gate);
+
+            CustomModelDefinition.Part arch = newPart("BOX");
+            arch.name = "Gate Arch";
+            arch.x = 0;
+            arch.y = 36;
+            arch.z = 14;
+            arch.width = 26;
+            arch.height = 6;
+            arch.depth = 6;
+            arch.material = "STONE";
+            arch.color = SemanticMaterial.STONE.baseColor();
+            parts.add(arch);
+
+            modelName.setText("Gatehouse");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a stone gatehouse kit");
+        });
+    }
+
     private void updateTransformToolStyles() {
         setTransformToolStyle(moveToolButton, transformOperation == TransformOperation.MOVE);
         setTransformToolStyle(rotateToolButton, transformOperation == TransformOperation.ROTATE);
@@ -699,6 +1880,95 @@ public final class ModelStudio {
         }
         entries.sort(java.util.Comparator.comparing(entry -> entry.name.toLowerCase()));
         templateList.setItems(FXCollections.observableArrayList(entries));
+    }
+
+    private void snapSelectedToGrid() {
+        List<CustomModelDefinition.Part> selected = selectedParts();
+        if (selected.isEmpty()) {
+            statusLabel.setText("Select one or more scene objects to snap to the grid.");
+            return;
+        }
+        performEdit(() -> {
+            applyFields();
+            for (CustomModelDefinition.Part part : selected) {
+                part.x = snapToGrid(part.x);
+                part.y = snapToGrid(part.y);
+                part.z = snapToGrid(part.z);
+            }
+            refreshPreview();
+            statusLabel.setText("Snapped " + selected.size() + " component(s) to the " + GRID_SIZE + "-unit grid");
+        });
+    }
+
+    private double snapToGrid(double value) {
+        return Math.round(value / GRID_SIZE) * GRID_SIZE;
+    }
+
+    private void centerSelectedOnOrigin() {
+        List<CustomModelDefinition.Part> selected = selectedParts();
+        if (selected.isEmpty()) {
+            statusLabel.setText("Select one or more scene objects to center on the origin.");
+            return;
+        }
+        double avgX = selected.stream().mapToDouble(part -> part.x).average().orElse(0.0);
+        double avgY = selected.stream().mapToDouble(part -> part.y).average().orElse(0.0);
+        double avgZ = selected.stream().mapToDouble(part -> part.z).average().orElse(0.0);
+        performEdit(() -> {
+            applyFields();
+            for (CustomModelDefinition.Part part : selected) {
+                part.x -= avgX;
+                part.y -= avgY;
+                part.z -= avgZ;
+            }
+            refreshPreview();
+            statusLabel.setText("Centered " + selected.size() + " component(s) on the origin");
+        });
+    }
+
+    private void importSelectedTemplate() {
+        TemplateEntry selected = templateList.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            statusLabel.setText("Select a saved model or component to import.");
+            return;
+        }
+        try {
+            CustomModelDefinition model = CustomModelLibrary.read(selected.path);
+            performEdit(() -> {
+                int firstAdded = parts.size();
+                appendImportedParts(model);
+                nextPartNumber = parts.size() + 1;
+                refreshPartList(firstAdded);
+                refreshPreview();
+                modelName.requestFocus();
+                statusLabel.setText("Imported " + model.name + " from the asset library.");
+            });
+        } catch (IOException | IllegalArgumentException ex) {
+            error("Could not import template", ex.getMessage());
+        }
+    }
+
+    private void deleteSelectedTemplate() {
+        TemplateEntry selected = templateList.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            statusLabel.setText("Select a saved model or component to delete.");
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Delete \"" + selected.path.getFileName() + "\" from the asset library?");
+        confirm.setTitle("Delete asset");
+        confirm.setHeaderText("Remove the selected saved asset");
+        confirm.initOwner(stage);
+        if (confirm.showAndWait().orElse(javafx.scene.control.ButtonType.CANCEL)
+                != javafx.scene.control.ButtonType.OK) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(selected.path);
+            refreshTemplates();
+            statusLabel.setText("Deleted asset: " + selected.path.getFileName());
+        } catch (IOException ex) {
+            error("Could not delete template", ex.getMessage());
+        }
     }
 
     private void addTemplatesFrom(Path directory, String kind) {
@@ -1700,6 +2970,9 @@ public final class ModelStudio {
         hierarchySearch.textProperty().addListener((obs, oldValue, newValue) ->
                 refreshPartList(selectedPartIndex()));
 
+        Button rename = new Button("Rename");
+        rename.setTooltip(new javafx.scene.control.Tooltip("Rename the active scene object"));
+        rename.setOnAction(event -> renameSelectedPart());
         Button remove = new Button("Remove");
         remove.setOnAction(event -> removeSelectedPart());
         Button duplicate = new Button("Duplicate");
@@ -1733,6 +3006,12 @@ public final class ModelStudio {
         Button selectPeers = new Button("Peers");
         selectPeers.setTooltip(new javafx.scene.control.Tooltip("Select the active component and its visible siblings"));
         selectPeers.setOnAction(event -> selectRelatedHierarchy(HierarchySelection.SIBLINGS));
+        Button snap = new Button("Snap");
+        snap.setTooltip(new javafx.scene.control.Tooltip("Snap selected objects to the 4-unit grid"));
+        snap.setOnAction(event -> snapSelectedToGrid());
+        Button center = new Button("Center");
+        center.setTooltip(new javafx.scene.control.Tooltip("Center the selected objects around the world origin"));
+        center.setOnAction(event -> centerSelectedOnOrigin());
         Button expandAll = new Button("Expand");
         expandAll.setTooltip(new javafx.scene.control.Tooltip("Expand every Outliner branch"));
         expandAll.setOnAction(event -> setTreeExpanded(partList.getRoot(), true));
@@ -1749,9 +3028,9 @@ public final class ModelStudio {
         hierarchyActions.setMinHeight(0);
         hierarchyActions.setMaxWidth(Double.MAX_VALUE);
         Button[] hierarchyButtons = {
-                duplicate, moveUp, moveDown, hide, showAll, remove,
-                selectParent, selectRoot, selectDescendants, selectChildren, selectPeers,
-                expandAll, collapseAll
+                rename, duplicate, moveUp, moveDown, hide, showAll,
+                remove, selectParent, selectRoot, selectDescendants, selectChildren, selectPeers,
+                snap, center, expandAll, collapseAll
         };
         for (int index = 0; index < hierarchyButtons.length; index++) {
             int column = index % 3;
@@ -1771,7 +3050,7 @@ public final class ModelStudio {
             constraints.setMinWidth(0);
             hierarchyActions.getColumnConstraints().add(constraints);
         }
-        for (int row = 0; row < 4; row++) {
+        for (int row = 0; row < 6; row++) {
             RowConstraints actionRow = new RowConstraints();
             actionRow.setMinHeight(26);
             actionRow.setPrefHeight(26);
@@ -1980,6 +3259,33 @@ public final class ModelStudio {
             part.depth = 26;
         }
         return part;
+    }
+
+    private void renameSelectedPart() {
+        CustomModelDefinition.Part part = selectedPart();
+        if (part == null) {
+            statusLabel.setText("Select a component to rename.");
+            return;
+        }
+        TextInputDialog dialog = new TextInputDialog(part.name);
+        dialog.setTitle("Rename component");
+        dialog.setHeaderText("Set the scene object name");
+        dialog.setContentText("Component name:");
+        dialog.showAndWait().ifPresent(name -> {
+            String trimmed = name == null ? "" : name.trim();
+            if (trimmed.isBlank()) {
+                statusLabel.setText("Component names cannot be blank.");
+                return;
+            }
+            performEdit(() -> {
+                applyFields();
+                part.name = trimmed;
+                refreshPartList(selectedPartIndex());
+                showPart(part);
+                updateSelectionSummary();
+                statusLabel.setText("Renamed component to '" + trimmed + "'.");
+            });
+        });
     }
 
     private void duplicateSelectedPart() {
