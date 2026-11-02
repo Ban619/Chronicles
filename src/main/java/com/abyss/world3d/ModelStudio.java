@@ -631,6 +631,9 @@ public final class ModelStudio {
         Button generateCryptButton = new Button("⛧  Generate Crypt Chamber");
         generateCryptButton.setMaxWidth(Double.MAX_VALUE);
         generateCryptButton.setOnAction(event -> generateCryptChamber());
+        Button generateKeepButton = new Button("🏰  Generate Keep");
+        generateKeepButton.setMaxWidth(Double.MAX_VALUE);
+        generateKeepButton.setOnAction(event -> generateKeep());
         Button clear = new Button("⌫  Clear Model");
         clear.setMaxWidth(Double.MAX_VALUE);
         clear.setOnAction(event -> clearModel());
@@ -648,7 +651,7 @@ public final class ModelStudio {
                 generateCampfireButton, generateRuinButton, generatePlazaButton,
                 generateMarketStallButton, generateBridgeButton, generateGatehouseButton,
                 generateForestGroveButton, generateCourtyardButton, generateCryptButton,
-                clear, new Label("ADD PRIMITIVE"), geometry);
+                generateKeepButton, clear, new Label("ADD PRIMITIVE"), geometry);
         Button duplicate = new Button("Duplicate Selected");
         duplicate.setMaxWidth(Double.MAX_VALUE);
         duplicate.setOnAction(event -> duplicateSelectedPart());
@@ -1939,6 +1942,102 @@ public final class ModelStudio {
             refreshPartList(0);
             refreshPreview();
             statusLabel.setText("Generated an ancient crypt chamber kit");
+        });
+    }
+
+    private void generateKeep() {
+        performEdit(() -> {
+            parts.clear();
+
+            CustomModelDefinition.Part base = newPart("BOX");
+            base.name = "Keep Base";
+            base.x = 0;
+            base.y = 4;
+            base.z = 0;
+            base.width = 70;
+            base.height = 8;
+            base.depth = 70;
+            base.material = "STONE";
+            base.color = SemanticMaterial.STONE.baseColor();
+            parts.add(base);
+
+            CustomModelDefinition.Part walls = newPart("BOX");
+            walls.name = "Keep Walls";
+            walls.x = 0;
+            walls.y = 28;
+            walls.z = 0;
+            walls.width = 52;
+            walls.height = 36;
+            walls.depth = 52;
+            walls.material = "STONE";
+            walls.color = SemanticMaterial.STONE.baseColor();
+            parts.add(walls);
+
+            CustomModelDefinition.Part roof = newPart("CONE");
+            roof.name = "Keep Roof";
+            roof.x = 0;
+            roof.y = 56;
+            roof.z = 0;
+            roof.width = 66;
+            roof.height = 26;
+            roof.depth = 66;
+            roof.material = "WOOD";
+            roof.color = SemanticMaterial.WOOD.baseColor();
+            parts.add(roof);
+
+            CustomModelDefinition.Part towerLeft = newPart("BOX");
+            towerLeft.name = "Keep Tower Left";
+            towerLeft.x = -22;
+            towerLeft.y = 28;
+            towerLeft.z = 0;
+            towerLeft.width = 12;
+            towerLeft.height = 44;
+            towerLeft.depth = 12;
+            towerLeft.material = "STONE";
+            towerLeft.color = SemanticMaterial.STONE.baseColor();
+            parts.add(towerLeft);
+
+            CustomModelDefinition.Part towerRight = newPart("BOX");
+            towerRight.name = "Keep Tower Right";
+            towerRight.x = 22;
+            towerRight.y = 28;
+            towerRight.z = 0;
+            towerRight.width = 12;
+            towerRight.height = 44;
+            towerRight.depth = 12;
+            towerRight.material = "STONE";
+            towerRight.color = SemanticMaterial.STONE.baseColor();
+            parts.add(towerRight);
+
+            CustomModelDefinition.Part gate = newPart("BOX");
+            gate.name = "Keep Gate";
+            gate.x = 0;
+            gate.y = 18;
+            gate.z = 26;
+            gate.width = 18;
+            gate.height = 24;
+            gate.depth = 4;
+            gate.material = "IRON";
+            gate.color = SemanticMaterial.IRON.baseColor();
+            parts.add(gate);
+
+            CustomModelDefinition.Part banner = newPart("BOX");
+            banner.name = "Keep Banner";
+            banner.x = 0;
+            banner.y = 44;
+            banner.z = -20;
+            banner.width = 2;
+            banner.height = 28;
+            banner.depth = 14;
+            banner.material = "LEATHER";
+            banner.color = SemanticMaterial.LEATHER.baseColor();
+            parts.add(banner);
+
+            modelName.setText("Castle Keep");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a fortified castle keep kit");
         });
     }
 

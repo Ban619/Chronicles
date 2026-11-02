@@ -54,7 +54,7 @@ corresponding fallback.
 The 3D Model Studio also ships with reusable procedural scene kits for fast world
 assembly: lanterns, walls, staircases, pillar rows, benches, archways, fences,
 wells, tree clusters, forest groves, village courtyards, crypt chambers,
-shrines, crystal clusters, small houses, fountains, campfires, ruin towers,
-village plazas, market stalls, stone bridges, and gatehouses. These can be saved
-into `engine/models/` or `engine/components/` as JSON and reused across maps and
-prop compositions.
+castles/keeps, shrines, crystal clusters, small houses, fountains, campfires,
+ruin towers, village plazas, market stalls, stone bridges, and gatehouses.
+These can be saved into `engine/models/` or `engine/components/` as JSON and
+reused across maps and prop compositions.
