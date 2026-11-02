@@ -628,6 +628,9 @@ public final class ModelStudio {
         Button generateCourtyardButton = new Button("⛲  Generate Courtyard");
         generateCourtyardButton.setMaxWidth(Double.MAX_VALUE);
         generateCourtyardButton.setOnAction(event -> generateCourtyard());
+        Button generateCryptButton = new Button("⛧  Generate Crypt Chamber");
+        generateCryptButton.setMaxWidth(Double.MAX_VALUE);
+        generateCryptButton.setOnAction(event -> generateCryptChamber());
         Button clear = new Button("⌫  Clear Model");
         clear.setMaxWidth(Double.MAX_VALUE);
         clear.setOnAction(event -> clearModel());
@@ -644,8 +647,8 @@ public final class ModelStudio {
                 generateCrystalButton, generateHouseButton, generateFountainButton,
                 generateCampfireButton, generateRuinButton, generatePlazaButton,
                 generateMarketStallButton, generateBridgeButton, generateGatehouseButton,
-                generateForestGroveButton, generateCourtyardButton, clear,
-                new Label("ADD PRIMITIVE"), geometry);
+                generateForestGroveButton, generateCourtyardButton, generateCryptButton,
+                clear, new Label("ADD PRIMITIVE"), geometry);
         Button duplicate = new Button("Duplicate Selected");
         duplicate.setMaxWidth(Double.MAX_VALUE);
         duplicate.setOnAction(event -> duplicateSelectedPart());
@@ -1832,6 +1835,110 @@ public final class ModelStudio {
             refreshPartList(0);
             refreshPreview();
             statusLabel.setText("Generated a village courtyard scene kit");
+        });
+    }
+
+    private void generateCryptChamber() {
+        performEdit(() -> {
+            parts.clear();
+
+            CustomModelDefinition.Part floor = newPart("BOX");
+            floor.name = "Crypt Floor";
+            floor.x = 0;
+            floor.y = 2;
+            floor.z = 0;
+            floor.width = 72;
+            floor.height = 4;
+            floor.depth = 72;
+            floor.material = "STONE";
+            floor.color = SemanticMaterial.STONE.baseColor();
+            parts.add(floor);
+
+            for (double x : new double[] {-26, 26}) {
+                for (double z : new double[] {-26, 26}) {
+                    CustomModelDefinition.Part pillar = newPart("BOX");
+                    pillar.name = (x < 0 ? "West" : "East") + " Crypt Pillar";
+                    pillar.x = x;
+                    pillar.y = 20;
+                    pillar.z = z;
+                    pillar.width = 8;
+                    pillar.height = 38;
+                    pillar.depth = 8;
+                    pillar.material = "STONE";
+                    pillar.color = SemanticMaterial.STONE.baseColor();
+                    parts.add(pillar);
+                }
+            }
+
+            CustomModelDefinition.Part altar = newPart("BOX");
+            altar.name = "Crypt Altar";
+            altar.x = 0;
+            altar.y = 8;
+            altar.z = 0;
+            altar.width = 22;
+            altar.height = 8;
+            altar.depth = 14;
+            altar.material = "STONE";
+            altar.color = SemanticMaterial.STONE.baseColor();
+            parts.add(altar);
+
+            CustomModelDefinition.Part crystal = newPart("CONE");
+            crystal.name = "Crypt Crystal";
+            crystal.x = 0;
+            crystal.y = 26;
+            crystal.z = 0;
+            crystal.width = 10;
+            crystal.height = 22;
+            crystal.depth = 10;
+            crystal.material = "GLASS";
+            crystal.finish = "EMISSIVE";
+            crystal.color = SemanticMaterial.FLAME.baseColor();
+            parts.add(crystal);
+
+            CustomModelDefinition.Part arch = newPart("BOX");
+            arch.name = "Crypt Arch";
+            arch.x = 0;
+            arch.y = 34;
+            arch.z = 26;
+            arch.width = 24;
+            arch.height = 8;
+            arch.depth = 8;
+            arch.material = "STONE";
+            arch.color = SemanticMaterial.STONE.baseColor();
+            parts.add(arch);
+
+            double[] wallXs = {-18, 18};
+            for (double x : wallXs) {
+                CustomModelDefinition.Part wall = newPart("BOX");
+                wall.name = x < 0 ? "Left Crypt Wall" : "Right Crypt Wall";
+                wall.x = x;
+                wall.y = 16;
+                wall.z = 0;
+                wall.width = 6;
+                wall.height = 30;
+                wall.depth = 50;
+                wall.material = "STONE";
+                wall.color = SemanticMaterial.STONE.baseColor();
+                parts.add(wall);
+            }
+
+            CustomModelDefinition.Part tomb = newPart("BOX");
+            tomb.name = "Crypt Tomb";
+            tomb.x = 0;
+            tomb.y = 8;
+            tomb.z = -20;
+            tomb.width = 18;
+            tomb.height = 12;
+            tomb.depth = 12;
+            tomb.material = "STONE";
+            tomb.color = SemanticMaterial.STONE.baseColor();
+            parts.add(tomb);
+
+            modelName.setText("Ancient Crypt");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated an ancient crypt chamber kit");
         });
     }
 
