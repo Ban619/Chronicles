@@ -625,6 +625,9 @@ public final class ModelStudio {
         Button generateForestGroveButton = new Button("❋  Generate Forest Grove");
         generateForestGroveButton.setMaxWidth(Double.MAX_VALUE);
         generateForestGroveButton.setOnAction(event -> generateForestGrove());
+        Button generateCourtyardButton = new Button("⛲  Generate Courtyard");
+        generateCourtyardButton.setMaxWidth(Double.MAX_VALUE);
+        generateCourtyardButton.setOnAction(event -> generateCourtyard());
         Button clear = new Button("⌫  Clear Model");
         clear.setMaxWidth(Double.MAX_VALUE);
         clear.setOnAction(event -> clearModel());
@@ -641,7 +644,8 @@ public final class ModelStudio {
                 generateCrystalButton, generateHouseButton, generateFountainButton,
                 generateCampfireButton, generateRuinButton, generatePlazaButton,
                 generateMarketStallButton, generateBridgeButton, generateGatehouseButton,
-                generateForestGroveButton, clear, new Label("ADD PRIMITIVE"), geometry);
+                generateForestGroveButton, generateCourtyardButton, clear,
+                new Label("ADD PRIMITIVE"), geometry);
         Button duplicate = new Button("Duplicate Selected");
         duplicate.setMaxWidth(Double.MAX_VALUE);
         duplicate.setOnAction(event -> duplicateSelectedPart());
@@ -1697,6 +1701,137 @@ public final class ModelStudio {
             refreshPartList(0);
             refreshPreview();
             statusLabel.setText("Generated a forest grove scene kit");
+        });
+    }
+
+    private void generateCourtyard() {
+        performEdit(() -> {
+            parts.clear();
+
+            CustomModelDefinition.Part floor = newPart("BOX");
+            floor.name = "Courtyard Floor";
+            floor.x = 0;
+            floor.y = 2;
+            floor.z = 0;
+            floor.width = 86;
+            floor.height = 4;
+            floor.depth = 86;
+            floor.material = "STONE";
+            floor.color = SemanticMaterial.STONE.baseColor();
+            parts.add(floor);
+
+            CustomModelDefinition.Part ring = newPart("BOX");
+            ring.name = "Courtyard Ring";
+            ring.x = 0;
+            ring.y = 4;
+            ring.z = 0;
+            ring.width = 62;
+            ring.height = 2;
+            ring.depth = 62;
+            ring.material = "STONE";
+            ring.color = SemanticMaterial.STONE.baseColor();
+            parts.add(ring);
+
+            CustomModelDefinition.Part fountain = newPart("CYLINDER");
+            fountain.name = "Courtyard Fountain";
+            fountain.x = 0;
+            fountain.y = 10;
+            fountain.z = 0;
+            fountain.width = 20;
+            fountain.height = 18;
+            fountain.depth = 20;
+            fountain.material = "STONE";
+            fountain.color = SemanticMaterial.STONE.baseColor();
+            parts.add(fountain);
+
+            CustomModelDefinition.Part water = newPart("CYLINDER");
+            water.name = "Courtyard Fountain Water";
+            water.x = 0;
+            water.y = 14;
+            water.z = 0;
+            water.width = 14;
+            water.height = 5;
+            water.depth = 14;
+            water.material = "GLASS";
+            water.finish = "GLASS";
+            water.color = SemanticMaterial.FLAME.baseColor();
+            parts.add(water);
+
+            double[][] benchLocations = {{-30, 0}, {30, 0}, {0, -30}, {0, 30}};
+            for (double[] location : benchLocations) {
+                CustomModelDefinition.Part bench = newPart("BOX");
+                bench.name = "Courtyard Bench";
+                bench.x = location[0];
+                bench.y = 8;
+                bench.z = location[1];
+                bench.width = 18;
+                bench.height = 4;
+                bench.depth = 10;
+                bench.material = "WOOD";
+                bench.color = SemanticMaterial.WOOD.baseColor();
+                parts.add(bench);
+            }
+
+            double[][] lanternLocations = {{-38, -22}, {-38, 22}, {38, -22}, {38, 22}};
+            for (double[] location : lanternLocations) {
+                CustomModelDefinition.Part post = newPart("CYLINDER");
+                post.name = "Lantern Post";
+                post.x = location[0];
+                post.y = 18;
+                post.z = location[1];
+                post.width = 4;
+                post.height = 22;
+                post.depth = 4;
+                post.material = "IRON";
+                post.color = SemanticMaterial.IRON.baseColor();
+                parts.add(post);
+
+                CustomModelDefinition.Part glow = newPart("SPHERE");
+                glow.name = "Lantern Glow";
+                glow.x = location[0];
+                glow.y = 31;
+                glow.z = location[1];
+                glow.width = 8;
+                glow.height = 8;
+                glow.depth = 8;
+                glow.material = "GLASS";
+                glow.finish = "EMISSIVE";
+                glow.color = SemanticMaterial.FLAME.baseColor();
+                parts.add(glow);
+            }
+
+            double[] archXs = {-18, 18};
+            for (double x : archXs) {
+                CustomModelDefinition.Part pillar = newPart("BOX");
+                pillar.name = x < 0 ? "Left Courtyard Pillar" : "Right Courtyard Pillar";
+                pillar.x = x;
+                pillar.y = 26;
+                pillar.z = 34;
+                pillar.width = 8;
+                pillar.height = 52;
+                pillar.depth = 8;
+                pillar.material = "STONE";
+                pillar.color = SemanticMaterial.STONE.baseColor();
+                parts.add(pillar);
+            }
+
+            CustomModelDefinition.Part arch = newPart("BOX");
+            arch.name = "Courtyard Arch";
+            arch.x = 0;
+            arch.y = 52;
+            arch.z = 34;
+            arch.width = 42;
+            arch.height = 8;
+            arch.depth = 8;
+            arch.material = "STONE";
+            arch.color = SemanticMaterial.STONE.baseColor();
+            parts.add(arch);
+
+            modelName.setText("Courtyard");
+            tilePicker.getSelectionModel().selectFirst();
+            refreshPartList(0);
+            refreshPreview();
+            statusLabel.setText("Generated a village courtyard scene kit");
         });
     }
 
